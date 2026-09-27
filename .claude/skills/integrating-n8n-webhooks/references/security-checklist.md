@@ -8,6 +8,8 @@
   `node -e "console.log(require('node:crypto').randomBytes(32).toString('hex'))"`.
 - `x-n8n-token` goes only to `https://` or to loopback `http://127.0.0.1|::1|localhost`.
 - The callback trusts only the HMAC: no IP checks as a substitute, no "shared token in the URL".
+- n8n must not send callbacks to any URL a request asks for: allow only the app origin for `callbackUrl` (IF node
+  in `n8n-side-setup.md`) or use a fixed URL — otherwise the webhook becomes an SSRF relay.
 
 ## Logging
 

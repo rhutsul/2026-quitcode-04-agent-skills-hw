@@ -9,6 +9,8 @@ Copy, rename, keep the checks. Examples use event `quote-request` (async, 202 + 
 import "server-only";
 import { randomUUID } from "node:crypto";
 
+// The only module that calls n8n. Contract: .claude/skills/integrating-n8n-webhooks.
+
 const TIMEOUT_MS = 10_000;
 const RETRY_DELAYS_MS = [1_000, 3_000]; // at most 2 retries → 3 attempts
 const LOOPBACK = new Set(["127.0.0.1", "[::1]", "localhost"]);
@@ -57,7 +59,9 @@ export async function triggerWorkflow(
 ): Promise<TriggerResult> {
   const url = webhookUrl(event);
   const token = process.env.N8N_WEBHOOK_TOKEN;
-  if (!url || !token) {
+  // With a callback the answer comes signed with N8N_CALLBACK_SECRET: without it every callback would be
+  // refused and the record would wait forever, so do not start such a workflow at all.
+  if (!url || !token || (options.callbackUrl && !process.env.N8N_CALLBACK_SECRET)) {
     console.error(`[n8n] ${event}: not sent, n8n settings are missing or invalid`);
     return { ok: false, reason: "config" };
   }
@@ -319,20 +323,26 @@ export async function requestQuote(_prev: QuoteFormState, formData: FormData): P
   const quote = await db.insertQuote({ ...parsed.data, status: "queued", idempotencyKey: randomUUID() });
 
   after(async () => {
-    const callbackUrl = callbackUrlFor("quote-request");
-    const result = callbackUrl
-      ? await triggerWorkflow(
-          "quote-request",
-          // The minimum the workflow needs — never the whole row.
-          { quoteId: quote.id, company: quote.company, email: quote.email, description: quote.description, budget: quote.budget },
-          { idempotencyKey: quote.idempotencyKey, callbackUrl },
-        )
-      : ({ ok: false, reason: "config" } as const);
+    try {
+      const callbackUrl = callbackUrlFor("quote-request");
+      const result = callbackUrl
+        ? await triggerWorkflow(
+            "quote-request",
+            // The minimum the workflow needs — never the whole row.
+            { quoteId: quote.id, company: quote.company, email: quote.email, description: quote.description, budget: quote.budget },
+            { idempotencyKey: quote.idempotencyKey, callbackUrl },
+          )
+        : ({ ok: false, reason: "config" } as const);
 
-    // Conditional transitions: a fast workflow's callback may already have set ready/failed.
-    // Never overwrite that with an unconditional update.
-    if (result.ok && result.jobId) await db.markQuoteProcessing(quote.id, result.jobId); // queued → processing
-    else await db.markQuoteNotStarted(quote.id, result.ok ? "rejected" : result.reason); // queued → failed
+      // Conditional transitions: a fast workflow's callback may already have set ready/failed.
+      // Never overwrite that with an unconditional update.
+      if (result.ok && result.jobId) await db.markQuoteProcessing(quote.id, result.jobId); // queued → processing
+      else await db.markQuoteNotStarted(quote.id, result.ok ? "rejected" : result.reason); // queued → failed
+    } catch (error) {
+      // Anything unexpected must not leave the record queued forever: no callback will come for it.
+      console.error(`[n8n] quote-request: trigger failed for ${quote.id}: ${error instanceof Error ? error.name : "error"}`);
+      await db.markQuoteNotStarted(quote.id, "error").catch(() => undefined);
+    }
   });
 
   redirect(`/quotes/${quote.id}`); // or return { status: "ok", id: quote.id }
@@ -357,13 +367,14 @@ completeQuote(result)            // find by jobId, else by idempotencyKey while 
 ```ts
 // Two after() callbacks: the audit entry must not wait for n8n's retries.
 after(() => logAudit("lead.created", lead.id));
-after(() =>
-  triggerWorkflow(
+after(async () => {
+  const delivered = await triggerWorkflow(
     "lead-created",
     { leadId: lead.id, fullName: lead.fullName, email: lead.email, message: lead.message, source: lead.source },
     { idempotencyKey }, // created once for this lead (store it with the record if you can)
-  ),
-);
+  );
+  if (!delivered.ok) await logAudit("lead.n8n_not_delivered", lead.id); // a trace, no personal data
+});
 ```
 
 Never `await fetch(process.env.SOME_N8N_URL, …)` straight from an action; never send the whole lead

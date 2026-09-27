@@ -16,6 +16,11 @@ it ourselves. Give the human these settings as text (example: event `quote-reque
 5. **Edit Fields** — field `ts` = `{{ Math.floor($now.toSeconds()) }}`, field `body` =
    `{{ JSON.stringify({ version: 1, event: 'quote-request.completed', data: { jobId: $execution.id, status: 'completed', correlationId: $('Webhook').item.json.headers['x-correlation-id'], requestIdempotencyKey: $('Webhook').item.json.headers['idempotency-key'], result: { documentUrl: … }, completedAt: $now.toISO() } }) }}`.
    The body is signed and sent as **one and the same string**.
+5a. **IF** (before signing) — continue only if `{{ $('Webhook').item.json.body.callbackUrl }}` starts with the
+   app origin (`APP_BASE_URL` of this client, e.g. `https://portal.client.example/api/n8n/`); otherwise stop. The
+   URL comes from the request body: without this check anyone holding `x-n8n-token` could make n8n send signed
+   requests to an address of their choice (SSRF). Simpler alternative: put the fixed callback URL into the
+   HTTP Request node and ignore `callbackUrl`.
 6. **Crypto** (v2) — Action `Hmac`, Type `SHA256`, Encoding `HEX`, value `{{ $json.ts + '.' + $json.body }}`,
    credential **Crypto** with Hmac Secret = `N8N_CALLBACK_SECRET`.
 7. **HTTP Request** — `POST` to `{{ $('Webhook').item.json.body.callbackUrl }}`. Headers:
