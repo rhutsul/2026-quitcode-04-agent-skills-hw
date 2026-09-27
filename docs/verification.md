@@ -336,8 +336,8 @@ Docker Desktop):
 | duplicate (той самий `idempotency-key`) | 200 `{"duplicate":true}` | 200 ✅ |
 | bad-signature | 401 | 401 ✅ |
 | missing-signature | 401 | 401 ✅ |
-| stale-timestamp (−301 с) | 401 | 401 ✅ |
-| future-timestamp (+301 с) | 401 | 401 ✅ |
+| stale-timestamp (−301 с на момент цього прогону; тепер −310 с) | 401 | 401 ✅ |
+| future-timestamp (+301 с на момент цього прогону; тепер +310 с) | 401 | 401 ✅ |
 | reformatted-body (тіло переформатовано після підпису) | 401 | 401 ✅ |
 | wrong-content-type (`text/plain`) | 415 | 415 ✅ |
 | unknown-event | 404 | 404 ✅ |

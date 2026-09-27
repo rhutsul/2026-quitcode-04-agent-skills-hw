@@ -10,8 +10,8 @@ const CASES = [
   { name: "duplicate", expect: [200], about: "the same callback again (same idempotency-key) → {duplicate:true}" },
   { name: "bad-signature", expect: [401], about: "signature made with another secret" },
   { name: "missing-signature", expect: [401], about: "no x-n8n-signature header" },
-  { name: "stale-timestamp", expect: [401], about: "x-n8n-timestamp 301 s in the past" },
-  { name: "future-timestamp", expect: [401], about: "x-n8n-timestamp 301 s in the future" },
+  { name: "stale-timestamp", expect: [401], about: "x-n8n-timestamp 310 s in the past" },
+  { name: "future-timestamp", expect: [401], about: "x-n8n-timestamp 310 s in the future" },
   { name: "reformatted-body", expect: [401], about: "body pretty-printed after signing (bytes differ)" },
   { name: "wrong-content-type", expect: [415], about: "content-type text/plain" },
   { name: "unknown-event", expect: [404], about: "last path segment replaced with an unknown event" },
@@ -101,6 +101,8 @@ const jobId = args["job-id"] ?? randomUUID();
 const correlationId = randomUUID();
 
 const now = () => Math.floor(Date.now() / 1000);
+// 10 s past the ±300 s window: a second ticking between signing and the server check cannot bring it back inside.
+const WINDOW_MARGIN_S = 310;
 const sign = (ts, raw, key = secret) => `sha256=${createHmac("sha256", key).update(`${ts}.${raw}`).digest("hex")}`;
 
 function envelope(id, extra = {}) {
@@ -145,11 +147,11 @@ function build(name) {
       return { target: url, headers: h, body: validBody };
     }
     case "stale-timestamp": {
-      const t = String(now() - 301);
+      const t = String(now() - WINDOW_MARGIN_S);
       return { target: url, headers: headers(validBody, t), body: validBody };
     }
     case "future-timestamp": {
-      const t = String(now() + 301);
+      const t = String(now() + WINDOW_MARGIN_S);
       return { target: url, headers: headers(validBody, t), body: validBody };
     }
     case "reformatted-body": {
