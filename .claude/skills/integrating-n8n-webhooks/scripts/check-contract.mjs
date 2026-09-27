@@ -110,11 +110,21 @@ const rel = (abs) => relative(ROOT, abs).split(sep).join("/");
 // Source helpers: strip comments (keep strings and line numbers), find calls, resolve definitions
 // ---------------------------------------------------------------------------------------------
 
-/** Replace comments with spaces; keep strings, template literals and newlines where they were. */
-function stripComments(src) {
+/**
+ * Replace comments with spaces; keep strings, template literals and newlines where they were.
+ * With blankLiterals, also blank the contents of strings, template text (not its ${…}) and regex literals, so
+ * only code is left — same length and line numbers as the source.
+ */
+function stripComments(src, blankLiterals = false) {
   const out = src.split("");
   const blank = (from, to) => {
     for (let k = from; k < to; k++) if (out[k] !== "\n" && out[k] !== "\r") out[k] = " ";
+  };
+  // Template text from `from` up to `end` (as returned by skipTemplateChunk): stop before "`" or "${".
+  const blankChunk = (from, end) => {
+    if (!blankLiterals) return;
+    const stop = src[end - 1] === "`" ? end - 1 : src[end - 2] === "$" && src[end - 1] === "{" ? end - 2 : end;
+    blank(from, stop);
   };
   let i = 0;
   const templateDepth = []; // brace depth at which each open template's ${ } started
@@ -139,17 +149,23 @@ function stripComments(src) {
       continue;
     }
     if (c === '"' || c === "'") {
-      i = skipQuoted(src, i, c);
+      const end = skipQuoted(src, i, c);
+      if (blankLiterals) blank(i + 1, end - 1);
+      i = end;
       lastSignificant = c;
       continue;
     }
     if (c === "`") {
-      i = skipTemplateChunk(src, i + 1, templateDepth, () => braceDepth);
+      const end = skipTemplateChunk(src, i + 1, templateDepth, () => braceDepth);
+      blankChunk(i + 1, end);
+      i = end;
       lastSignificant = "`";
       continue;
     }
     if (c === "/" && (lastSignificant === "" || "(,=:[!&|?{};+-*%<>~^".includes(lastSignificant) || /\breturn\s*$/.test(src.slice(Math.max(0, i - 8), i)))) {
-      i = skipRegex(src, i);
+      const end = skipRegex(src, i);
+      if (blankLiterals) blank(i, end);
+      i = end;
       lastSignificant = "/";
       continue;
     }
@@ -157,7 +173,9 @@ function stripComments(src) {
     if (c === "}") {
       if (templateDepth.length && templateDepth[templateDepth.length - 1] === braceDepth) {
         templateDepth.pop();
-        i = skipTemplateChunk(src, i + 1, templateDepth, () => braceDepth);
+        const end = skipTemplateChunk(src, i + 1, templateDepth, () => braceDepth);
+        blankChunk(i + 1, end);
+        i = end;
         lastSignificant = "`";
         continue;
       }
@@ -449,7 +467,8 @@ function codeOnly(text) {
 const files = walk(ROOT).map((abs) => {
   const src = readFileSync(abs, "utf8");
   const code = stripComments(src);
-  return { abs, path: rel(abs), src, code, starts: lineStarts(src) };
+  // bare: code only — no strings, template text or regex literals (for "is this really a call" checks).
+  return { abs, path: rel(abs), src, code, bare: stripComments(src, true), starts: lineStarts(src) };
 });
 const byPath = new Map(files.map((f) => [f.path, f]));
 
@@ -575,8 +594,9 @@ check("C4", "callback route reads the raw body and parses JSON only after verify
   if (!units.length) return note("no callback route in scope");
   for (const u of units) {
     const r = u.route;
+    // Calls are looked up in f.bare (no strings or regex literals): "req.text()" in a string is not a call.
     for (const f of u.members) {
-      for (const m of f.code.matchAll(new RegExp(`(?<![\\w$])${reIdent(u.param)}\\.(json|formData)\\(\\s*\\)`, "g"))) {
+      for (const m of f.bare.matchAll(new RegExp(`(?<![\\w$])${reIdent(u.param)}\\.(json|formData)\\(\\s*\\)`, "g"))) {
         fail(f.path, lineOf(f, m.index), `${u.param}.${m[1]}() — read the raw text first; re-serialising breaks the signature`);
       }
     }
@@ -585,18 +605,17 @@ check("C4", "callback route reads the raw body and parses JSON only after verify
     // (req.text() / arrayBuffer() / a reader that streams req.body).
     // Helper: a function the route calls with req (not the POST(req) signature itself) that is defined in one
     // of the route's modules and reads the body there.
-    const calledWithReq = [...r.code.matchAll(new RegExp(`(?<!function\\s+)(?<![\\w$])([A-Za-z_$][\\w$]*)\\(\\s*${reIdent(u.param)}(?![\\w$])`, "g"))]
+    const calledWithReq = [...r.bare.matchAll(new RegExp(`(?<!function\\s+)(?<![\\w$])([A-Za-z_$][\\w$]*)\\(\\s*${reIdent(u.param)}(?![\\w$])`, "g"))]
       .map((m) => m[1])
       .filter((name) => !/^(POST|GET|PUT|PATCH|DELETE)$/.test(name));
     // …and it must read the body from its own first parameter (the request it receives).
     // Reads the body of the request named `name`: text()/arrayBuffer(), body.getReader() or for await … of body.
-    // (?<![\w$.]) — the parameter itself, not ctx.req or $req. String contents are dropped first, so a string
-    // such as "req.text()" is not a read.
+    // (?<![\w$.]) — the parameter itself, not ctx.req or $req. `code` is bare code (see above).
     const readsBodyOf = (name, code) => {
       const own = `(?<![\\w$.])${reIdent(name)}`;
       return new RegExp(
         `${own}\\.(text|arrayBuffer)\\(\\s*\\)|${own}\\.body\\s*[!?]?\\.\\s*getReader\\(\\s*\\)|\\bof\\s+${own}\\.body\\b`,
-      ).test(codeOnly(code));
+      ).test(code);
     };
     const readsFromParam = (def) => {
       const p = (
@@ -607,9 +626,9 @@ check("C4", "callback route reads the raw body and parses JSON only after verify
       return p ? readsBodyOf(p, def) : false;
     };
     const helperReads = calledWithReq.some((name) =>
-      u.members.some((m) => m !== r && readsFromParam(definitionOf(m, name))),
+      u.members.some((m) => m !== r && readsFromParam(definitionOf({ code: m.bare }, name))),
     );
-    const readsRaw = readsBodyOf(u.param, r.code) || helperReads;
+    const readsRaw = readsBodyOf(u.param, r.bare) || helperReads;
     if (!readsRaw) fail(r.path, 1, `raw body is never read (${u.param}.text() or a streaming reader)`, true, helpers);
     const verifyRe = /\b(timingSafeEqual|verify\w*|\w*[Ss]ignature\w*|\w*[Hh]mac\w*)\s*\(/g;
     const verifyAt = [...r.code.matchAll(verifyRe)].find((m) => !/^(createHmac|function)$/.test(m[1]));
