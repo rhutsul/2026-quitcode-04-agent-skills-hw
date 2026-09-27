@@ -17,16 +17,19 @@ it ourselves. Give the human these settings as text (example: event `quote-reque
    `{{ JSON.stringify({ version: 1, event: 'quote-request.completed', data: { jobId: $execution.id, status: 'completed', correlationId: $('Webhook').item.json.headers['x-correlation-id'], requestIdempotencyKey: $('Webhook').item.json.headers['idempotency-key'], result: { documentUrl: … }, completedAt: $now.toISO() } }) }}`.
    The body is signed and sent as **one and the same string**.
 5a. **IF** (before signing) — continue only if
-   `{{ String($('Webhook').item.json.body.callbackUrl ?? '') === 'https://portal.client.example/api/n8n/quote-request' }}`
-   is true, with this client's `APP_BASE_URL` + `/api/n8n/<event>` as the literal: the workflow serves one event,
-   so its callback URL is known in advance and must match **exactly**. Otherwise stop. Do not compare a prefix
+   `{{ String($('Webhook').item.json.body?.callbackUrl ?? '') === 'https://portal.client.example/api/n8n/quote-request' }}`
+   is true. The workflow serves one event, so its callback URL is known in advance and must match **exactly**.
+   Otherwise stop. Write the literal exactly as the app sends it (`new URL('/api/n8n/<event>', APP_BASE_URL)`):
+   origin only (any path and trailing `/` of `APP_BASE_URL` are dropped), host in lower case, no `:443`, then
+   `/api/n8n/<event>`. Safest is to copy `callbackUrl` from the input of the first execution. A literal that
+   differs by one character stops every callback, and the record stays `processing`. Do not compare a prefix
    (`startsWith`): `…/api/n8n/../../admin` or `…/api/n8n/%2e%2e/…` would pass it and still reach another path of
-   the app with a valid signature. `String(… ?? '')` keeps a missing `callbackUrl` from failing the expression. In
-   production the URL is `https://`; plain `http://` only for local development on `localhost`, `127.0.0.1`,
-   `[::1]` or `host.docker.internal` (n8n in Docker, app on the host — see step 7). The URL comes from the
-   request body: without this check anyone holding `x-n8n-token` could make n8n send signed requests to an
-   address of their choice (SSRF). Simpler alternative: put the fixed callback URL into the HTTP Request node and
-   ignore `callbackUrl`.
+   the app with a valid signature. `body?.` and `String(… ?? '')` keep a request without `callbackUrl` from
+   failing the expression. In production the URL is `https://`; plain `http://` only for local development on
+   `localhost`, `127.0.0.1`, `[::1]` or `host.docker.internal` (n8n in Docker, app on the host — see step 7).
+   The URL comes from the request body: without this check anyone holding `x-n8n-token` could make n8n send
+   signed requests to an address of their choice (SSRF). Simpler alternative: put the fixed callback URL into
+   the HTTP Request node and ignore `callbackUrl`.
 6. **Crypto** (v2) — Action `Hmac`, Type `SHA256`, Encoding `HEX`, value `{{ $json.ts + '.' + $json.body }}`,
    credential **Crypto** with Hmac Secret = `N8N_CALLBACK_SECRET`.
 7. **HTTP Request** — `POST` to `{{ $('Webhook').item.json.body.callbackUrl }}`. Headers:
