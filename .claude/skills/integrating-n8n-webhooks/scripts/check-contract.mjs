@@ -303,16 +303,22 @@ function findCalls(file, namePattern) {
   return calls;
 }
 
+/** An identifier inside a RegExp source: `$` is a valid identifier character but a regex anchor. */
+const reIdent = (id) => id.replace(/\$/g, "\\$");
+/** Optional type parameters `<…>`, one level of nesting (`<T extends Record<string, unknown>>`). */
+const GENERICS = "(?:<(?:[^<>]|<[^<>]*>)*>)";
+
 /** Source text of `const|let|var id = …` or `function id(…) {…}` in the same file ('' if none). */
 function definitionOf(file, id) {
   if (!/^[A-Za-z_$][\w$]*$/.test(id)) return "";
   const code = file.code;
-  const fn = new RegExp(`\\bfunction\\s+${id}\\s*(?:<[^>]*>)?\\s*\\(`).exec(code); // also function f<T>(req)
+  const name = reIdent(id);
+  const fn = new RegExp(`\\bfunction\\s+${name}\\s*${GENERICS}?\\s*\\(`).exec(code); // also function f<T>(req)
   if (fn) {
     const open = code.indexOf("{", matchBracket(code, fn.index + fn[0].length - 1));
     return open === -1 ? "" : code.slice(fn.index, matchBracket(code, open));
   }
-  const v = new RegExp(`\\b(?:const|let|var)\\s+${id}\\b[^=;]*=`).exec(code);
+  const v = new RegExp(`\\b(?:const|let|var)\\s+${name}(?![\\w$])[^=;]*=`).exec(code);
   if (!v) return "";
   let k = v.index + v[0].length;
   let depth = 0;
@@ -514,7 +520,7 @@ check("C4", "callback route reads the raw body and parses JSON only after verify
   for (const u of units) {
     const r = u.route;
     for (const f of u.members) {
-      for (const m of f.code.matchAll(new RegExp(`\\b${u.param}\\.(json|formData)\\(\\s*\\)`, "g"))) {
+      for (const m of f.code.matchAll(new RegExp(`(?<![\\w$])${reIdent(u.param)}\\.(json|formData)\\(\\s*\\)`, "g"))) {
         fail(f.path, lineOf(f, m.index), `${u.param}.${m[1]}() — read the raw text first; re-serialising breaks the signature`);
       }
     }
@@ -523,23 +529,23 @@ check("C4", "callback route reads the raw body and parses JSON only after verify
     // (req.text() / arrayBuffer() / a reader that streams req.body).
     // Helper: a function the route calls with req (not the POST(req) signature itself) that is defined in one
     // of the route's modules and reads the body there.
-    const calledWithReq = [...r.code.matchAll(new RegExp(`(?<!function\\s+)\\b([A-Za-z_$][\\w$]*)\\(\\s*${u.param}\\b`, "g"))]
+    const calledWithReq = [...r.code.matchAll(new RegExp(`(?<!function\\s+)(?<![\\w$])([A-Za-z_$][\\w$]*)\\(\\s*${reIdent(u.param)}(?![\\w$])`, "g"))]
       .map((m) => m[1])
       .filter((name) => !/^(POST|GET|PUT|PATCH|DELETE)$/.test(name));
     // …and it must read the body from its own first parameter (the request it receives).
     // Reads the body of the request named `name`: text()/arrayBuffer(), body.getReader() or for await … of body.
     // (?<![\w$.]) — the parameter itself, not ctx.req or $req.
     const readsBodyOf = (name, code) => {
-      const own = `(?<![\\w$.])${name.replace(/\$/g, "\\$")}`;
+      const own = `(?<![\\w$.])${reIdent(name)}`;
       return new RegExp(
         `${own}\\.(text|arrayBuffer)\\(\\s*\\)|${own}\\.body\\s*[!?]?\\.\\s*getReader\\(\\s*\\)|\\bof\\s+${own}\\.body\\b`,
       ).test(code);
     };
     const readsFromParam = (def) => {
       const p = (
-        /^\s*(?:export\s+)?(?:async\s+)?function\s*[\w$]*\s*(?:<[^>]*>)?\s*\(\s*([A-Za-z_$][\w$]*)/.exec(def) ??
-        /=\s*(?:async\s+)?function\s*[\w$]*\s*(?:<[^>]*>)?\s*\(\s*([A-Za-z_$][\w$]*)/.exec(def) ??
-        /=\s*(?:async\s*)?(?:<[^>]*>\s*)?\(?\s*([A-Za-z_$][\w$]*)/.exec(def)
+        new RegExp(`^\\s*(?:export\\s+)?(?:async\\s+)?function\\s*[\\w$]*\\s*${GENERICS}?\\s*\\(\\s*([A-Za-z_$][\\w$]*)`).exec(def) ??
+        new RegExp(`=\\s*(?:async\\s+)?function\\s*[\\w$]*\\s*${GENERICS}?\\s*\\(\\s*([A-Za-z_$][\\w$]*)`).exec(def) ??
+        new RegExp(`=\\s*(?:async\\s*)?(?:${GENERICS}\\s*)?\\(?\\s*([A-Za-z_$][\\w$]*)`).exec(def)
       )?.[1];
       return p ? readsBodyOf(p, def) : false;
     };
