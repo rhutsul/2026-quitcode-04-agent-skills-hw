@@ -28,9 +28,9 @@ export function LeadActions({ leadId, status }: { leadId: string; status: LeadSt
           return;
         }
         router.refresh();
-      } catch (error) {
+      } catch (err) {
         // A redirect (e.g. to /login when the session expired) rejects the call too: let Next.js handle it.
-        unstable_rethrow(error);
+        unstable_rethrow(err);
         setCurrent(previous); // the call itself failed (network, server error)
         setError(FAILED_MESSAGE);
       }
@@ -48,8 +48,8 @@ export function LeadActions({ leadId, status }: { leadId: string; status: LeadSt
           return;
         }
         router.push("/dashboard");
-      } catch (error) {
-        unstable_rethrow(error); // redirects stay redirects
+      } catch (err) {
+        unstable_rethrow(err); // redirects stay redirects
         setError(FAILED_MESSAGE);
       }
     });

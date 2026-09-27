@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { SESSION_COOKIE } from "@/lib/session";
 
+// Optimistic check only: every page, layout and Server Action under /dashboard must still call getCurrentUser().
 export function proxy(request: NextRequest) {
   // Server Action calls check the session themselves (getCurrentUser redirects to /login in a way the client
   // router understands); a proxy redirect here would reach the client as an unexpected HTML response instead.
