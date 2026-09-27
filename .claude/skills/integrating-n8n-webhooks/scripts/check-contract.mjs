@@ -307,9 +307,9 @@ function findCalls(file, namePattern) {
 function definitionOf(file, id) {
   if (!/^[A-Za-z_$][\w$]*$/.test(id)) return "";
   const code = file.code;
-  const fn = new RegExp(`\\bfunction\\s+${id}\\s*\\(`).exec(code);
+  const fn = new RegExp(`\\bfunction\\s+${id}\\s*(?:<[^>]*>)?\\s*\\(`).exec(code); // also function f<T>(req)
   if (fn) {
-    const open = code.indexOf("{", matchBracket(code, code.indexOf("(", fn.index)));
+    const open = code.indexOf("{", matchBracket(code, fn.index + fn[0].length - 1));
     return open === -1 ? "" : code.slice(fn.index, matchBracket(code, open));
   }
   const v = new RegExp(`\\b(?:const|let|var)\\s+${id}\\b[^=;]*=`).exec(code);
@@ -527,27 +527,26 @@ check("C4", "callback route reads the raw body and parses JSON only after verify
       .map((m) => m[1])
       .filter((name) => !/^(POST|GET|PUT|PATCH|DELETE)$/.test(name));
     // …and it must read the body from its own first parameter (the request it receives).
+    // Reads the body of the request named `name`: text()/arrayBuffer(), body.getReader() or for await … of body.
+    // (?<![\w$.]) — the parameter itself, not ctx.req or $req.
+    const readsBodyOf = (name, code) => {
+      const own = `(?<![\\w$.])${name.replace(/\$/g, "\\$")}`;
+      return new RegExp(
+        `${own}\\.(text|arrayBuffer)\\(\\s*\\)|${own}\\.body\\s*[!?]?\\.\\s*getReader\\(\\s*\\)|\\bof\\s+${own}\\.body\\b`,
+      ).test(code);
+    };
     const readsFromParam = (def) => {
       const p = (
         /^\s*(?:export\s+)?(?:async\s+)?function\s*[\w$]*\s*(?:<[^>]*>)?\s*\(\s*([A-Za-z_$][\w$]*)/.exec(def) ??
         /=\s*(?:async\s+)?function\s*[\w$]*\s*(?:<[^>]*>)?\s*\(\s*([A-Za-z_$][\w$]*)/.exec(def) ??
         /=\s*(?:async\s*)?(?:<[^>]*>\s*)?\(?\s*([A-Za-z_$][\w$]*)/.exec(def)
       )?.[1];
-      if (!p) return false;
-      const q = p.replace(/\$/g, "\\$");
-      // (?<![\w$.]) — the parameter itself, not ctx.req or $req.
-      const own = `(?<![\\w$.])${q}`;
-      return new RegExp(
-        `${own}\\.(text|arrayBuffer)\\(\\s*\\)|${own}\\.body\\s*[!?]?\\.\\s*getReader\\(\\s*\\)|\\bof\\s+${own}\\.body\\b`,
-      ).test(def);
+      return p ? readsBodyOf(p, def) : false;
     };
     const helperReads = calledWithReq.some((name) =>
       u.members.some((m) => m !== r && readsFromParam(definitionOf(m, name))),
     );
-    const readsRaw =
-      new RegExp(`\\b${u.param}\\.(text|arrayBuffer)\\(\\s*\\)`).test(r.code) ||
-      new RegExp(`\\b${u.param}\\.body\\s*[!?]?\\.\\s*getReader\\(\\s*\\)`).test(r.code) ||
-      helperReads;
+    const readsRaw = readsBodyOf(u.param, r.code) || helperReads;
     if (!readsRaw) fail(r.path, 1, `raw body is never read (${u.param}.text() or a streaming reader)`, true, helpers);
     const verifyRe = /\b(timingSafeEqual|verify\w*|\w*[Ss]ignature\w*|\w*[Hh]mac\w*)\s*\(/g;
     const verifyAt = [...r.code.matchAll(verifyRe)].find((m) => !/^(createHmac|function)$/.test(m[1]));
