@@ -56,7 +56,7 @@ export async function requestQuote(_prevState: QuoteFormState, formData: FormDat
       else await db.markQuoteNotStarted(quote.id, result.ok ? "rejected" : result.reason);
     } catch (error) {
       // Anything unexpected must not leave the quote queued forever (no callback will come).
-      console.error(`[n8n] ${QUOTE_EVENT}: trigger failed for ${quote.id}: ${error instanceof Error ? error.name : "error"}`);
+      console.error(`[n8n] ${QUOTE_EVENT}: trigger failed (correlation ${quote.correlationId}): ${error instanceof Error ? error.name : "error"}`);
       await db.markQuoteNotStarted(quote.id, "error").catch(() => undefined);
     }
   });
