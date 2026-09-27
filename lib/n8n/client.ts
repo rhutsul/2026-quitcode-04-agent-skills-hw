@@ -6,6 +6,8 @@ import { randomUUID } from "node:crypto";
 const TIMEOUT_MS = 10_000;
 const RETRY_DELAYS_MS = [1_000, 3_000]; // at most 2 retries → 3 attempts
 const LOOPBACK = new Set(["127.0.0.1", "[::1]", "localhost"]);
+// Callbacks in local development may also come from n8n in Docker to the app on the host.
+const LOCAL_CALLBACK_HOSTS = new Set([...LOOPBACK, "host.docker.internal"]);
 
 export type TriggerOptions = {
   /** Created once per business operation, stored with the record, reused on every retry. */
@@ -21,12 +23,13 @@ export type TriggerResult =
 
 /**
  * `${APP_BASE_URL}/api/n8n/<event>`, or null when APP_BASE_URL is missing, invalid or not https (plain http only
- * for this machine) — the same rule the n8n side applies before it sends a signed callback there.
+ * for local development: loopback or host.docker.internal) — the same rule the n8n side applies before it sends a
+ * signed callback there.
  */
 export function callbackUrlFor(event: string): string | null {
   try {
     const url = new URL(`/api/n8n/${event}`, process.env.APP_BASE_URL);
-    const secure = url.protocol === "https:" || (url.protocol === "http:" && LOOPBACK.has(url.hostname));
+    const secure = url.protocol === "https:" || (url.protocol === "http:" && LOCAL_CALLBACK_HOSTS.has(url.hostname));
     return secure ? url.toString() : null;
   } catch {
     return null;
