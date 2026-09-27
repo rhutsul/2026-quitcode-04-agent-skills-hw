@@ -521,10 +521,18 @@ check("C4", "callback route reads the raw body and parses JSON only after verify
     const helpers = u.members.map((m) => m.path);
     // Raw body: req.text()/arrayBuffer() in the route, or in a helper the route passes req to
     // (req.text() / arrayBuffer() / a reader that streams req.body).
-    const helperCode = u.members.filter((m) => m !== r).map((m) => m.code).join("\n");
+    // Helper: a function the route calls with req (not the POST(req) signature itself) that is defined in one
+    // of the route's modules and reads the body there.
+    const calledWithReq = [...r.code.matchAll(new RegExp(`(?<!function\\s+)\\b([A-Za-z_$][\\w$]*)\\(\\s*${u.param}\\b`, "g"))]
+      .map((m) => m[1])
+      .filter((name) => !/^(POST|GET|PUT|PATCH|DELETE)$/.test(name));
+    const helperReads = calledWithReq.some((name) =>
+      u.members.some((m) => m !== r && /\.(text|arrayBuffer|getReader)\(\s*\)/.test(definitionOf(m, name))),
+    );
     const readsRaw =
       new RegExp(`\\b${u.param}\\.(text|arrayBuffer)\\(\\s*\\)`).test(r.code) ||
-      (/\.(text|arrayBuffer|getReader)\(\s*\)/.test(helperCode) && new RegExp(`\\w+\\(\\s*${u.param}\\b`).test(r.code));
+      new RegExp(`\\b${u.param}\\.body\\s*[!?]?\\.\\s*getReader\\(\\s*\\)`).test(r.code) ||
+      helperReads;
     if (!readsRaw) fail(r.path, 1, `raw body is never read (${u.param}.text() or a streaming reader)`, true, helpers);
     const verifyRe = /\b(timingSafeEqual|verify\w*|\w*[Ss]ignature\w*|\w*[Hh]mac\w*)\s*\(/g;
     const verifyAt = [...r.code.matchAll(verifyRe)].find((m) => !/^(createHmac|function)$/.test(m[1]));
@@ -558,7 +566,9 @@ check("C5", "callback signature: HMAC-SHA256, length check + timingSafeEqual, ne
     for (const f of u.members.filter((m) => /signature|hmac|x-n8n/i.test(m.code))) {
       for (const m of f.code.matchAll(/[^\n;]*?(!==|===|!=|==)[^\n;]*/g)) {
         const expr = codeOnly(m[0]);
-        if (signatureWord.test(expr) && !/\.(length|byteLength)\b|typeof\s/.test(expr)) {
+        // A key comparison (expectedKey, idempotency key) is not a signature comparison.
+        const aboutKey = /\b\w*key\w*\b|idempot/i.test(expr) && !/sig|hmac|digest/i.test(expr);
+        if (signatureWord.test(expr) && !aboutKey && !/\.(length|byteLength)\b|typeof\s/.test(expr)) {
           fail(f.path, lineOf(f, m.index), `signature compared with ${m[1]} — use timingSafeEqual`);
         }
       }
@@ -652,8 +662,16 @@ check("C11", "callback route: 415 content-type, 413 64 KB, 401 x-n8n-timestamp �
     else if (!/\b300\b|5\s*\*\s*60\b/.test(t)) fail(at, 1, "no ±300 s window for x-n8n-timestamp", true, helpers);
     if (!/idempotency-key/i.test(t)) fail(at, 1, "idempotency-key is not used to drop repeated callbacks", true, helpers);
     // The header is not covered by the HMAC: it must be compared with fields of the signed body (jobId:event).
-    // One statement that compares the key with something built from jobId (e.g. key !== `${data.jobId}:${event}`).
-    else if (!t.split(/[\n;]/).some((stmt) => /jobId/.test(stmt) && /(!==|===|!=|==)/.test(stmt) && /\b\w*key\w*\b/i.test(stmt.replace(/jobId/g, "")))) {
+    // A comparison of the key with something built from jobId (e.g. key !== `${data.jobId}:${event}`), also when
+    // that value sits in a variable first (const expected = `${data.jobId}:…`; if (key !== expected)).
+    else if (
+      !u.members.some((f) =>
+        f.code.split(/[\n;]/).some((stmt) => {
+          if (!/(!==|===|!=|==)/.test(stmt) || !/\b\w*key\w*\b/i.test(stmt.replace(/jobId/g, ""))) return false;
+          return /jobId/.test(stmt) || /jobId/.test(expand(f, stmt, 1).slice(stmt.length));
+        }),
+      )
+    ) {
       fail(at, 1, "idempotency-key is not compared with the signed body (`${data.jobId}:${event}`)", true, helpers);
     }
   }
