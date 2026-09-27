@@ -6,11 +6,11 @@
   git, `NEXT_PUBLIC_*`, Client Components, query strings, logs, error bodies, or chat.
 - Do not read or print `.env.local`; ask the human to put values there. Generate new secrets with
   `node -e "console.log(require('node:crypto').randomBytes(32).toString('hex'))"`.
-- `x-n8n-token` goes only to `https://` or to loopback `http://127.0.0.1|::1|localhost`.
+- `x-n8n-token` goes only to `https://` or to loopback `http://127.0.0.1|[::1]|localhost`.
 - The callback trusts only the HMAC: no IP checks as a substitute, no "shared token in the URL".
-- n8n must not send callbacks to any URL a request asks for: `callbackUrl` must start with the literal prefix
-  `${APP_BASE_URL}/api/n8n/` including the trailing slash (IF node in `n8n-side-setup.md`), or use a fixed URL —
-  otherwise the webhook becomes an SSRF relay. Production callbacks are `https://`; `http://` only for local
+- n8n must not send callbacks to any URL a request asks for: `callbackUrl` must equal exactly
+  `${APP_BASE_URL}/api/n8n/<event>` of that workflow (IF node in `n8n-side-setup.md`; a prefix check lets
+  `../` through), or use a fixed URL — otherwise the webhook becomes an SSRF relay. Production callbacks are `https://`; `http://` only for local
   development on `localhost`, `127.0.0.1`, `[::1]` or `host.docker.internal`.
 
 ## Logging
