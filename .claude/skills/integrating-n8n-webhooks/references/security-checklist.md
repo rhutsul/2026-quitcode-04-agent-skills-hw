@@ -10,8 +10,9 @@
 - The callback trusts only the HMAC: no IP checks as a substitute, no "shared token in the URL".
 - n8n must not send callbacks to any URL a request asks for: `callbackUrl` must equal exactly
   `${APP_BASE_URL}/api/n8n/<event>` of that workflow (IF node in `n8n-side-setup.md`; a prefix check lets
-  `../` through), or use a fixed URL — otherwise the webhook becomes an SSRF relay. Production callbacks are `https://`; `http://` only for local
-  development on `localhost`, `127.0.0.1`, `[::1]` or `host.docker.internal`.
+  `../` through), or use a fixed URL — otherwise the webhook becomes an SSRF relay. Production callbacks are
+  `https://`; `http://` only to `localhost`, `127.0.0.1` or `[::1]` (never leaves the machine), and to
+  `host.docker.internal` only outside production (`callbackUrlFor` checks `NODE_ENV`).
 
 ## Logging
 

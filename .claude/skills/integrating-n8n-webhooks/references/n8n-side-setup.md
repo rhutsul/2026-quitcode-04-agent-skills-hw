@@ -27,7 +27,8 @@ it ourselves. Give the human these settings as text (example: event `quote-reque
    (`startsWith`): `…/api/n8n/../../admin` or `…/api/n8n/%2e%2e/…` would pass it and still reach another path of
    the app with a valid signature. `body?.` and `String(… ?? '')` keep a request without `callbackUrl` from
    failing the expression. In production the URL is `https://`; plain `http://` only for local development on
-   `localhost`, `127.0.0.1`, `[::1]` or `host.docker.internal` (n8n in Docker, app on the host — see step 7).
+   `localhost`, `127.0.0.1`, `[::1]` or `host.docker.internal` (n8n in Docker, app on the host — see step 7;
+   a production build of the app refuses `http://host.docker.internal`, so run `next dev` for that setup).
    The URL comes from the request body: without this check anyone holding `x-n8n-token` could make n8n send
    signed requests to an address of their choice (SSRF). Simpler alternative: put the fixed callback URL into
    the HTTP Request node and ignore `callbackUrl`.
@@ -42,7 +43,8 @@ it ourselves. Give the human these settings as text (example: event `quote-reque
    app's own retry policy (Next.js → n8n: 1 s, then 3 s, never on 4xx — `contract.md`): Retry On Fail waits a
    fixed interval and also repeats on 4xx; that is harmless here because the route answers 4xx only for bad or
    unknown callbacks and deduplicates by `idempotency-key`.
-   If n8n runs in Docker and the app on the host — `host.docker.internal`, not `localhost`.
+   If n8n runs in Docker and the app on the host — `host.docker.internal`, not `localhost` (with `next dev`:
+   a production build of the app accepts plain `http` only to loopback).
 8. **Save** and **Publish**. Publish again after every change.
 
 Why Raw and not «JSON → Using Fields Below»: n8n does not guarantee that serialising fields yields exactly
