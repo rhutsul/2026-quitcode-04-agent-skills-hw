@@ -10,7 +10,7 @@ export type NoteFormState =
       values: Partial<Record<NoteFormField, string>>;
     }
   | { status: "ok" }
-  | { status: "forbidden" };
+  | { status: "forbidden"; values: Partial<Record<NoteFormField, string>> };
 
 export type NoteParseResult =
   | { ok: true; data: { note: string } }
