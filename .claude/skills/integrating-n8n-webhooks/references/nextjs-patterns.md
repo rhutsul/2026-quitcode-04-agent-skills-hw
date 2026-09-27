@@ -347,7 +347,7 @@ export async function requestQuote(_prev: QuoteFormState, formData: FormData): P
       else await db.markQuoteNotStarted(quote.id, result.ok ? "rejected" : result.reason); // queued → failed
     } catch (error) {
       // Anything unexpected must not leave the record queued forever: no callback will come for it.
-      console.error(`[n8n] quote-request: trigger failed for ${quote.id}: ${error instanceof Error ? error.name : "error"}`);
+      console.error(`[n8n] quote-request: trigger failed (correlation ${quote.correlationId}): ${error instanceof Error ? error.name : "error"}`);
       await db.markQuoteNotStarted(quote.id, "error").catch(() => undefined);
     }
   });

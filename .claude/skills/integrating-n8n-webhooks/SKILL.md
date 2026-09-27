@@ -59,8 +59,9 @@ workflow runs → it is async. Modes and URLs: [references/response-modes.md](re
 Order is fixed:
 
 1. unknown event → 404; `content-type` not `application/json` → 415 (before reading the body);
-2. read the raw text once (`req.text()`, or a reader that streams `req.body` and stops past 64 KB) — no
-   `req.json()`, no `JSON.parse` before step 5;
+2. read the raw text once with a bounded reader that streams `req.body` and stops past 64 KB (template:
+   `readBodyLimited`); plain `req.text()` only where the host already caps the body size — no `req.json()`, no
+   `JSON.parse` before step 5;
 3. body > 64 KB → 413 (refuse by `content-length` before reading, re-check the real size after);
 4. `x-n8n-timestamp` more than 300 s from now (either way) → 401;
 5. `x-n8n-signature` = `sha256=` + hex HMAC-SHA256(`N8N_CALLBACK_SECRET`, `` `${timestamp}.${raw}` ``):

@@ -126,7 +126,7 @@ sent). The path segment is the trigger event (`quote-request`); the body event i
 | # | Step | On failure |
 |---|---|---|
 | 1 | event from the path is known; `content-type` is `application/json` — **before** reading the body | 404 / 415 |
-| 2 | `const raw = await req.text()` (or a reader that streams `req.body` and stops past 64 KB) — body can be read once; no `req.json()`, no `JSON.parse` yet (re-serialising changes bytes, the signature would not match) | — |
+| 2 | `const raw = await readBodyLimited(req)` — a reader that streams `req.body` and stops past 64 KB (Route Handlers have no body-size limit of their own); plain `req.text()` only where the host caps the body size — body can be read once; no `req.json()`, no `JSON.parse` yet (re-serialising changes bytes, the signature would not match) | — |
 | 3 | `content-length` over 64 KB → refuse before reading; then `Buffer.byteLength(raw) > 64 * 1024` | 413 |
 | 4 | `x-n8n-timestamp` is an integer and `abs(now - ts) <= 300` s (anti-replay window, our decision) | 401 |
 | 5 | HMAC over `` `${timestamp}.${raw}` ``; compare lengths first, then `crypto.timingSafeEqual` (it throws on different lengths). Never `===`. | 401, no details |
