@@ -4,8 +4,8 @@ Contract: `.claude/skills/integrating-n8n-webhooks`. One row per event.
 
 | event | direction | n8n path | mode | owner |
 |---|---|---|---|---|
-| `quote-request` | Next.js → n8n → callback `/api/n8n/quote-request` | `/webhook/quote-request` | Respond to Webhook 202 `{job_id}` + signed callback (workflow runs 40–90 s) | Ruslan Hutsul (Studio Nova) |
-| `lead-created` | Next.js → n8n | `/webhook/lead-created` | Immediately (fire-and-forget) | Ruslan Hutsul (Studio Nova) |
+| `quote-request` | Next.js → n8n → callback `/api/n8n/quote-request` | `/webhook/quote-request` | Respond to Webhook 202 `{job_id}` + signed callback (workflow runs 40–90 s) | Ruslan Hutsul |
+| `lead-created` | Next.js → n8n | `/webhook/lead-created` | Immediately (fire-and-forget) | Ruslan Hutsul |
 
 ## lead-created
 

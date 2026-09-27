@@ -324,8 +324,7 @@ export async function requestQuote(_prev: QuoteFormState, formData: FormData): P
   // The idempotency key is created once and stored with the record: every retry reuses it,
   // and n8n echoes it back as data.requestIdempotencyKey.
   const quote = await db.insertQuote({
-    ...parsed.data,
-    status: "queued",
+    ...parsed.data, // insertQuote stores it with status "queued"
     idempotencyKey: randomUUID(),
     correlationId: randomUUID(), // the same id goes into both systems' logs
   });

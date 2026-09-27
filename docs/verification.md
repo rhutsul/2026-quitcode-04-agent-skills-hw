@@ -311,8 +311,6 @@ x-n8n-token». Після виправлення — «without idempotency-key»
 додано `lib/n8n/client.ts` з порушеннями, рядок із токеном у `.env.example` і змінено один рядок
 `app/actions.ts` поза викликом n8n. Старі порушення не показано, нові — так:
 
-Скорочено й стиснуто: лише рядки FAIL, кілька знахідок одного файлу — через «·».
-
 ```
 check-contract · root: ..\ws04-work\changed-fixture · scope: changed since base (2 changed + 1 untracked files)
 FAIL  C3   lib/n8n/client.ts:1  first statement must be import "server-only"
@@ -324,7 +322,8 @@ FAIL  C10  lib/n8n/client.ts:2  fetch to n8n without idempotency-key
 7 PASS, 4 FAIL · 6 finding(s) outside the changed lines not shown
 ```
 
-(скорочено до рядків FAIL; `app/actions.ts:54` і `.env.example:6` з базової лінії — серед 6 прихованих).
+(скорочено: лише рядки FAIL, кілька знахідок одного файлу — через «·»; `app/actions.ts:54` і `.env.example:6` з
+базової лінії — серед 6 прихованих).
 
 **Матриця колбеків (`send-signed-callback.mjs`)** проти шаблонного роуту в копії проєкту
 (`next start -p 3002`; мок `--port 5679 --mode respond-202`, бо порт 5678 на цій машині зайнятий
