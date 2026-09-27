@@ -24,7 +24,8 @@ Checks (each prints PASS or FAIL; FAIL lists file:line):
   C1  no /webhook-test/ URL in code or .env.example
   C2  no NEXT_PUBLIC_ n8n variables; no N8N_* or lib/n8n import in a "use client" file
   C3  n8n is called only from lib/n8n/*, and every lib/n8n/* module starts with import "server-only"
-  C4  callback route reads the raw body (req.text()) and parses JSON only after verifying the signature
+  C4  callback route reads the raw body (req.text() or a streaming reader) and parses JSON only after
+      verifying the signature
   C5  callback signature: HMAC-SHA256, length check + timingSafeEqual, never === / !==
   C6  every fetch to n8n has signal: AbortSignal.timeout(...)
   C7  no bodies, personal data, secrets or whole error objects in console.* of n8n code
@@ -70,12 +71,12 @@ try {
 } catch (error) {
   usageError(error.message);
 }
-if (args["changed-since"] !== undefined && !args["changed-since"].trim()) {
-  usageError("--changed-since needs a git ref (e.g. base, main, a SHA); an empty value would silently check everything");
-}
 if (args.help) {
   console.log(USAGE);
   process.exit(0);
+}
+if (args["changed-since"] !== undefined && !args["changed-since"].trim()) {
+  usageError("--changed-since needs a git ref (e.g. base, main, a SHA); an empty value would silently check everything");
 }
 
 const ROOT = resolve(args.root ?? ".");
@@ -462,7 +463,8 @@ function check(id, title, run) {
   const findings = [];
   const notes = [];
   run({
-    fail: (path, line, message, fileLevel = false) => findings.push({ path, line, message, fileLevel }),
+    // also: other files whose change should surface this finding under --changed-since (a callback route's helpers).
+    fail: (path, line, message, fileLevel = false, also = []) => findings.push({ path, line, message, fileLevel, also }),
     note: (text) => notes.push(text),
   });
   results.push({ id, title, findings, notes });
@@ -516,11 +518,14 @@ check("C4", "callback route reads the raw body and parses JSON only after verify
         fail(f.path, lineOf(f, m.index), `${u.param}.${m[1]}() — read the raw text first; re-serialising breaks the signature`);
       }
     }
-    // Raw body: req.text()/arrayBuffer() in the route, or a helper the route passes req to that streams req.body.
+    const helpers = u.members.map((m) => m.path);
+    // Raw body: req.text()/arrayBuffer() in the route, or in a helper the route passes req to
+    // (req.text() / arrayBuffer() / a reader that streams req.body).
+    const helperCode = u.members.filter((m) => m !== r).map((m) => m.code).join("\n");
     const readsRaw =
       new RegExp(`\\b${u.param}\\.(text|arrayBuffer)\\(\\s*\\)`).test(r.code) ||
-      (/\.getReader\(\s*\)/.test(u.text) && new RegExp(`\\w+\\(\\s*${u.param}\\b`).test(r.code));
-    if (!readsRaw) fail(r.path, 1, `raw body is never read (${u.param}.text() or a streaming reader)`, true);
+      (/\.(text|arrayBuffer|getReader)\(\s*\)/.test(helperCode) && new RegExp(`\\w+\\(\\s*${u.param}\\b`).test(r.code));
+    if (!readsRaw) fail(r.path, 1, `raw body is never read (${u.param}.text() or a streaming reader)`, true, helpers);
     const verifyRe = /\b(timingSafeEqual|verify\w*|\w*[Ss]ignature\w*|\w*[Hh]mac\w*)\s*\(/g;
     const verifyAt = [...r.code.matchAll(verifyRe)].find((m) => !/^(createHmac|function)$/.test(m[1]));
     const unitVerifies = /timingSafeEqual|createHmac/.test(u.text);
@@ -541,11 +546,12 @@ check("C4", "callback route reads the raw body and parses JSON only after verify
 check("C5", "callback signature: HMAC-SHA256, length check + timingSafeEqual, never === / !==", ({ fail, note }) => {
   if (!units.length) return note("no callback route in scope");
   for (const u of units) {
-    if (!/createHmac\s*\(\s*["']sha256["']|subtle\.(sign|verify)/.test(u.text)) fail(u.route.path, 1, "no HMAC-SHA256 over the raw body", true);
-    if (!/timingSafeEqual\s*\(/.test(u.text)) fail(u.route.path, 1, "signature not compared with crypto.timingSafeEqual", true);
+    const helpers = u.members.map((m) => m.path);
+    if (!/createHmac\s*\(\s*["']sha256["']|subtle\.(sign|verify)/.test(u.text)) fail(u.route.path, 1, "no HMAC-SHA256 over the raw body", true, helpers);
+    if (!/timingSafeEqual\s*\(/.test(u.text)) fail(u.route.path, 1, "signature not compared with crypto.timingSafeEqual", true, helpers);
     // A length check, or hashing both sides first (equal-length digests), keeps timingSafeEqual from throwing.
     else if (!/(\.length|byteLength)\s*(!==|===|!=|==)|(!==|===|!=|==)\s*[\w$.]+\.(length|byteLength)\b|createHash\s*\(/.test(u.text)) {
-      fail(u.route.path, 1, "no length check before timingSafeEqual (it throws on different lengths)", true);
+      fail(u.route.path, 1, "no length check before timingSafeEqual (it throws on different lengths)", true, helpers);
     }
     // Only files that deal with the signature; whole words, so "assignedTo" is not a "sig".
     const signatureWord = /\b(sig|sigs|signature\w*|\w+Signature\w*|signed\w*|expected\w*|computed\w*|digest\w*|\w+Digest\w*|hmac\w*|\w+Hmac\w*|mac)\b/i;
@@ -639,14 +645,16 @@ check("C11", "callback route: 415 content-type, 413 64 KB, 401 x-n8n-timestamp �
   for (const u of units) {
     const t = u.text;
     const at = u.route.path;
-    if (!/content-type/i.test(t) || !/\b415\b/.test(t)) fail(at, 1, "no 415 for a non-JSON content-type", true);
-    if (!/\b413\b/.test(t) || !/64\s*\*\s*1024|\b65_?536\b/.test(t)) fail(at, 1, "no 413 for bodies over 64 KB", true);
-    if (!/x-n8n-timestamp/i.test(t)) fail(at, 1, "x-n8n-timestamp is not checked", true);
-    else if (!/\b300\b|5\s*\*\s*60\b/.test(t)) fail(at, 1, "no ±300 s window for x-n8n-timestamp", true);
-    if (!/idempotency-key/i.test(t)) fail(at, 1, "idempotency-key is not used to drop repeated callbacks", true);
+    const helpers = u.members.map((m) => m.path);
+    if (!/content-type/i.test(t) || !/\b415\b/.test(t)) fail(at, 1, "no 415 for a non-JSON content-type", true, helpers);
+    if (!/\b413\b/.test(t) || !/64\s*\*\s*1024|\b65_?536\b/.test(t)) fail(at, 1, "no 413 for bodies over 64 KB", true, helpers);
+    if (!/x-n8n-timestamp/i.test(t)) fail(at, 1, "x-n8n-timestamp is not checked", true, helpers);
+    else if (!/\b300\b|5\s*\*\s*60\b/.test(t)) fail(at, 1, "no ±300 s window for x-n8n-timestamp", true, helpers);
+    if (!/idempotency-key/i.test(t)) fail(at, 1, "idempotency-key is not used to drop repeated callbacks", true, helpers);
     // The header is not covered by the HMAC: it must be compared with fields of the signed body (jobId:event).
-    else if (!/jobId\s*\}?\s*:\s*\$?\{|jobId\s*\+\s*["'`]:["'`]/.test(t)) {
-      fail(at, 1, "idempotency-key is not bound to the signed body (`${data.jobId}:${event}`)", true);
+    // One statement that compares the key with something built from jobId (e.g. key !== `${data.jobId}:${event}`).
+    else if (!t.split(/[\n;]/).some((stmt) => /jobId/.test(stmt) && /(!==|===|!=|==)/.test(stmt) && /\b\w*key\w*\b/i.test(stmt.replace(/jobId/g, "")))) {
+      fail(at, 1, "idempotency-key is not compared with the signed body (`${data.jobId}:${event}`)", true, helpers);
     }
   }
 });
@@ -688,6 +696,8 @@ if (args["changed-since"]) {
 function inScope(finding) {
   if (!scope) return true;
   if (scope.untracked.has(finding.path)) return true;
+  // A file-level finding about a callback route also counts when only one of its helpers changed.
+  if (finding.fileLevel && finding.also.some((p) => scope.untracked.has(p) || scope.changed.has(p))) return true;
   const lines = scope.changed.get(finding.path);
   if (!lines) return false;
   return finding.fileLevel || lines.has(finding.line);
