@@ -61,25 +61,31 @@ export async function submitLead(
   after(() => logAudit("lead.created", lead.id));
   const idempotencyKey = randomUUID();
   after(async () => {
-    const delivered = await triggerWorkflow(
-      "lead-created",
-      {
-        leadId: lead.id,
-        fullName: lead.fullName,
-        email: lead.email,
-        phone: lead.phone,
-        company: lead.company,
-        website: lead.website,
-        budget: lead.budget,
-        message: lead.message,
-        source: lead.source,
-        consentMarketing: lead.consentMarketing,
-        createdAt: lead.createdAt,
-      },
-      { idempotencyKey },
-    );
-    // Fire-and-forget still leaves a trace when n8n did not take the lead (no personal data in it).
-    if (!delivered.ok) await logAudit("lead.n8n_not_delivered", lead.id);
+    try {
+      const delivered = await triggerWorkflow(
+        "lead-created",
+        {
+          leadId: lead.id,
+          fullName: lead.fullName,
+          email: lead.email,
+          phone: lead.phone,
+          company: lead.company,
+          website: lead.website,
+          budget: lead.budget,
+          message: lead.message,
+          source: lead.source,
+          consentMarketing: lead.consentMarketing,
+          createdAt: lead.createdAt,
+        },
+        { idempotencyKey },
+      );
+      // Fire-and-forget still leaves a trace when n8n did not take the lead (no personal data in it).
+      if (!delivered.ok) await logAudit("lead.n8n_not_delivered", lead.id);
+    } catch (error) {
+      // Same rule as for quotes: an unexpected error still leaves a trace, never the lead itself.
+      console.error(`[n8n] lead-created: trigger failed for ${lead.id}: ${error instanceof Error ? error.name : "error"}`);
+      await logAudit("lead.n8n_not_delivered", lead.id).catch(() => undefined);
+    }
   });
 
   return { status: "ok" };
