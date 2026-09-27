@@ -61,7 +61,7 @@ export async function submitLead(
   after(() => logAudit("lead.created", lead.id));
   const idempotencyKey = randomUUID();
   after(async () => {
-    await triggerWorkflow(
+    const delivered = await triggerWorkflow(
       "lead-created",
       {
         leadId: lead.id,
@@ -78,6 +78,8 @@ export async function submitLead(
       },
       { idempotencyKey },
     );
+    // Fire-and-forget still leaves a trace when n8n did not take the lead (no personal data in it).
+    if (!delivered.ok) await logAudit("lead.n8n_not_delivered", lead.id);
   });
 
   return { status: "ok" };
