@@ -33,8 +33,8 @@ export type TriggerResult =
 
 /**
  * `${APP_BASE_URL}/api/n8n/<event>`, or null when APP_BASE_URL is missing, invalid or not https (plain http only
- * to loopback, or to host.docker.internal outside production) — the same rule the n8n side applies before it
- * sends a signed callback there.
+ * to loopback, or to host.docker.internal outside production) — at least as strict as the rule the n8n side
+ * applies before it sends a signed callback there.
  */
 export function callbackUrlFor(event: string): string | null {
   try {

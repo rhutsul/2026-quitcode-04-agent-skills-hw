@@ -43,8 +43,8 @@ it ourselves. Give the human these settings as text (example: event `quote-reque
    app's own retry policy (Next.js → n8n: 1 s, then 3 s, never on 4xx — `contract.md`): Retry On Fail waits a
    fixed interval and also repeats on 4xx; that is harmless here because the route answers 4xx only for bad or
    unknown callbacks and deduplicates by `idempotency-key`.
-   If n8n runs in Docker and the app on the host — `host.docker.internal`, not `localhost` (with `next dev`:
-   a production build of the app accepts plain `http` only to loopback).
+   If n8n runs in Docker and the app on the host — `host.docker.internal`, not `localhost`, and run the app
+   with `next dev`: a production build accepts plain `http` only to loopback.
 8. **Save** and **Publish**. Publish again after every change.
 
 Why Raw and not «JSON → Using Fields Below»: n8n does not guarantee that serialising fields yields exactly
