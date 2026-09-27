@@ -73,10 +73,21 @@
   із заголовком `Authorization: Bearer <N8N_CALLBACK_SECRET>`… Що потрібно від вас: додати в `.env.local`
   `N8N_QUOTE_WEBHOOK_URL`, `N8N_CALLBACK_SECRET`, `APP_URL`; у Webhook-вузлі обрати Respond: Immediately…
   Виклик вебхука n8n, як і наявний вебхук для лідів, іде без автентифікації.»
-- **Змінені файли** (`git diff --cached --stat base`): 11 файлів, +565 −1 — `.env.example`,
-  `app/api/quotes/[id]/callback/route.ts`, `app/quotes/[id]/page.tsx`, `app/quotes/new/actions.ts`,
-  `app/quotes/new/page.tsx`, `components/quote-form.tsx`, `components/quote-status-poller.tsx`, `lib/db.ts`,
-  `lib/quote-form.ts`, `lib/quote-workflow.ts`, `lib/types.ts`; діф: [`docs/ab/a-without-skill.diff`](ab/a-without-skill.diff)
+- **Змінені файли** (`git diff --cached --stat base` у копії після `git add -A`; діф: [`docs/ab/a-without-skill.diff`](ab/a-without-skill.diff)):
+  ```
+   .env.example                          |   9 +++
+   app/api/quotes/[id]/callback/route.ts |  74 ++++++++++++++++++++++++
+   app/quotes/[id]/page.tsx              | 103 ++++++++++++++++++++++++++++++++++
+   app/quotes/new/actions.ts             |  29 ++++++++++
+   app/quotes/new/page.tsx               |  30 ++++++++++
+   components/quote-form.tsx             |  86 ++++++++++++++++++++++++++++
+   components/quote-status-poller.tsx    |  17 ++++++
+   lib/db.ts                             |  54 +++++++++++++++++-
+   lib/quote-form.ts                     |  79 ++++++++++++++++++++++++++
+   lib/quote-workflow.ts                 |  59 +++++++++++++++++++
+   lib/types.ts                          |  26 +++++++++
+   11 files changed, 565 insertions(+), 1 deletion(-)
+  ```
 - **Змінні середовища, які додав агент:** `N8N_QUOTE_WEBHOOK_URL` (у `.env.example` — `/webhook-test/`),
   `N8N_CALLBACK_SECRET` (порожнє значення), `APP_URL`.
 - **`check-contract.mjs --root ../leaddesk-ab-a --changed-since base`** — лише код прогону:
@@ -117,6 +128,8 @@
   ```
   POST /webhook/quote-request -> 403 in 1 ms auth=missing | headers: accept,accept-language,content-type,user-agent | body 317 B sha256=d7be6151…
   ```
+  Поле `idempotency=` у цьому рядку відсутнє, бо мок друкує його лише після успішного Header Auth; у списку імен
+  заголовків `idempotency-key` немає, а в додатковому прогоні нижче мок прямо пише `idempotency=absent`.
   Далі нічого: на 403 «воркфлоу» не запускається, колбека немає. URL — `/webhook/` (у `.env.local` копії
   поставили production-адресу; у `.env.example` агента — `/webhook-test/`, з яким мок, як і n8n, відповів би
   404 без `--listen`). `idempotency` мок не записав, бо запит відхилено ще на Header Auth; заголовка
@@ -165,11 +178,24 @@
   `/webhook/lead-created` і які поля потрібні воркфлоу?» А також: «Я виходив з того, що воркфлоу одразу
   відповідає `202 {"job_id": …}`… як насправді налаштований воркфлоу клієнта, я не бачив» — і посилання на
   `n8n-side-setup.md` для людини.
-- **Змінені файли** (`git diff --cached --stat base`): 14 файлів, +753 −1 — `.env.example`,
-  `app/api/n8n/[event]/route.ts`, `app/quotes/[id]/page.tsx`, `app/quotes/actions.ts`, `app/quotes/new/page.tsx`,
-  `components/quote-form.tsx`, `components/quote-status-refresh.tsx`, `docs/n8n-integrations.md`, `lib/db.ts`,
-  `lib/n8n/callback.ts`, `lib/n8n/client.ts`, `lib/n8n/idempotency.ts`, `lib/quote-form.ts`, `lib/types.ts`;
-  діф: [`docs/ab/b-with-skill.diff`](ab/b-with-skill.diff)
+- **Змінені файли** (`git diff --cached --stat base` у копії після `git add -A`; діф: [`docs/ab/b-with-skill.diff`](ab/b-with-skill.diff)):
+  ```
+   .env.example                        |  11 ++++
+   app/api/n8n/[event]/route.ts        |  95 +++++++++++++++++++++++++++++++
+   app/quotes/[id]/page.tsx            |  94 ++++++++++++++++++++++++++++++
+   app/quotes/actions.ts               |  47 +++++++++++++++
+   app/quotes/new/page.tsx             |  35 ++++++++++++
+   components/quote-form.tsx           |  87 ++++++++++++++++++++++++++++
+   components/quote-status-refresh.tsx |  31 ++++++++++
+   docs/n8n-integrations.md            |  22 ++++++++
+   lib/db.ts                           |  84 ++++++++++++++++++++++++++-
+   lib/n8n/callback.ts                 |  27 +++++++++
+   lib/n8n/client.ts                   | 110 ++++++++++++++++++++++++++++++++++++
+   lib/n8n/idempotency.ts              |  17 ++++++
+   lib/quote-form.ts                   |  62 ++++++++++++++++++++
+   lib/types.ts                        |  32 +++++++++++
+   14 files changed, 753 insertions(+), 1 deletion(-)
+  ```
 - **Змінні середовища, які додав агент:** `N8N_WEBHOOK_BASE_URL`, `N8N_WEBHOOK_TOKEN`, `N8N_CALLBACK_SECRET`,
   `APP_BASE_URL` (секрети — `change-me-…`, адреси локальні, `/webhook`).
 - **`check-contract.mjs --root ../leaddesk-ab-b --changed-since base`** — лише код прогону:
@@ -313,6 +339,17 @@
 (запущено рівно 5 воркфлоу), 6-й і 7-й → 200 з `role="alert"` «Забагато запитів…», введене збережено; IP і
 персональних даних у журналі сервера — 0. `check-contract`: гілка 0 FAIL, `main` 6, прогін A 7, прогін B 0.
 
+### Додаткове посилення
+
+| Коміт | Що |
+|---|---|
+| `90cb935` | форма нотаток: після відмови (`forbidden`) введений текст повертається у поле |
+| `963639d` | кошторис: виняток усередині `after()` переводить запит у `failed` замість вічного `queued`; `triggerWorkflow` не запускає воркфлоу з колбеком, якщо немає `N8N_CALLBACK_SECRET` |
+| `5fa1383` | `lead-created`: невдала доставка в n8n лишає запис аудиту (подія й id, без персональних даних) |
+| `0220062` | ліміт частоти: старі ключі прибираються; у реєстрі — коли можна довіряти `x-forwarded-for` |
+| `4d4666f` | `check-contract`: C11 вимагає, щоб `idempotency-key` звірявся з полями підписаного тіла; порожній `--changed-since=` — помилка використання (код 2) |
+| `bc6505a` | скіл: IF-вузол в n8n пускає колбек лише на адресу застосунку (захист від SSRF через `callbackUrl`); шаблони = посилений код |
+
 - **Що скіл змінив у собі після прогонів:**
   - `7593db2` — перевірки колбека в `check-contract.mjs` враховують усі прямі імпорти роуту: на прогоні A
     верифікація токена жила в `lib/quote-workflow.ts`, і C5 хибно повідомляв «signature not compared with
@@ -327,11 +364,15 @@
     `redirect: "manual"`, аудит окремим `after()`; у `SKILL.md` — звідки брати `--job-id` для матриці.
   - `b52b76c`, `fa19e15` — за рев'ю CodeRabbit: C4 приймає потокове читання тіла; точніше правило ключа
     колбека; шаблони = код гілки (з `readBodyLimited`); пояснення різниці повторів n8n і застосунку.
+  - `4d4666f`, `bc6505a` — C11 перевіряє прив'язку ключа до підписаного тіла; порожній `--changed-since=` —
+    помилка; SSRF-запобіжник для `callbackUrl` на боці n8n; шаблони синхронізовано з посиленим кодом.
   - Результати прогонів від цих змін не змінились: A — 7 FAIL, B — 0 FAIL, `main` — 6 FAIL.
 
 ## Висновок
 
-Скіл змінив результат суттєво, і це видно з мока, а не з враження. Без скіла агент зробив акуратну фічу за
+Скіл змінив результат суттєво, і це видно з мока, а не з враження. Обмеження: кожне плече мало один прогін
+(A і B по разу, та сама модель і effort), тож розкид між повторними прогонами не виміряно; різниця тут
+якісна (403/401 проти 202 → колбек → «Готово», 7 проти 0 FAIL), а не статистична. Без скіла агент зробив акуратну фічу за
 загальними знаннями й наявним кодом (таймаут, `after()` для аудиту, `timingSafeEqual`, захист від підміни
 `Host`), але вона не працює з n8n, налаштованим за домовленостями команди: запуск отримує 403 (немає
 `x-n8n-token`), а в додатковому прогоні без Header Auth колбек з HMAC-підписом отримав 401; у `.env.example`
