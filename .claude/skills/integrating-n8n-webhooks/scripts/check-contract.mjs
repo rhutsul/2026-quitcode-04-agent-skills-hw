@@ -526,8 +526,16 @@ check("C4", "callback route reads the raw body and parses JSON only after verify
     const calledWithReq = [...r.code.matchAll(new RegExp(`(?<!function\\s+)\\b([A-Za-z_$][\\w$]*)\\(\\s*${u.param}\\b`, "g"))]
       .map((m) => m[1])
       .filter((name) => !/^(POST|GET|PUT|PATCH|DELETE)$/.test(name));
+    // …and it must read the body from its own first parameter (the request it receives).
+    const readsFromParam = (def) => {
+      const p = (/^\s*(?:export\s+)?(?:async\s+)?function\s+[\w$]+\s*\(\s*([A-Za-z_$][\w$]*)/.exec(def) ??
+        /=\s*(?:async\s*)?\(?\s*([A-Za-z_$][\w$]*)/.exec(def))?.[1];
+      if (!p) return false;
+      const q = p.replace(/\$/g, "\\$");
+      return new RegExp(`\\b${q}\\.(text|arrayBuffer)\\(\\s*\\)|\\b${q}\\.body\\s*[!?]?\\.\\s*getReader\\(\\s*\\)`).test(def);
+    };
     const helperReads = calledWithReq.some((name) =>
-      u.members.some((m) => m !== r && /\.(text|arrayBuffer|getReader)\(\s*\)/.test(definitionOf(m, name))),
+      u.members.some((m) => m !== r && readsFromParam(definitionOf(m, name))),
     );
     const readsRaw =
       new RegExp(`\\b${u.param}\\.(text|arrayBuffer)\\(\\s*\\)`).test(r.code) ||
