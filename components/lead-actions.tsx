@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { useRouter } from "next/navigation";
+import { unstable_rethrow, useRouter } from "next/navigation";
 import { deleteLead, updateLeadStatus } from "@/app/actions";
 import { LEAD_STATUSES, type LeadStatus } from "@/lib/types";
 import { STATUS_LABELS } from "./status-badge";
@@ -28,7 +28,9 @@ export function LeadActions({ leadId, status }: { leadId: string; status: LeadSt
           return;
         }
         router.refresh();
-      } catch {
+      } catch (error) {
+        // A redirect (e.g. to /login when the session expired) rejects the call too: let Next.js handle it.
+        unstable_rethrow(error);
         setCurrent(previous); // the call itself failed (network, server error)
         setError(FAILED_MESSAGE);
       }
@@ -46,7 +48,8 @@ export function LeadActions({ leadId, status }: { leadId: string; status: LeadSt
           return;
         }
         router.push("/dashboard");
-      } catch {
+      } catch (error) {
+        unstable_rethrow(error); // redirects stay redirects
         setError(FAILED_MESSAGE);
       }
     });
