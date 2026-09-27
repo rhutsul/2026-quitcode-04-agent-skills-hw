@@ -70,6 +70,9 @@ try {
 } catch (error) {
   usageError(error.message);
 }
+if (args["changed-since"] !== undefined && !args["changed-since"].trim()) {
+  usageError("--changed-since needs a git ref (e.g. base, main, a SHA); an empty value would silently check everything");
+}
 if (args.help) {
   console.log(USAGE);
   process.exit(0);
@@ -641,6 +644,10 @@ check("C11", "callback route: 415 content-type, 413 64 KB, 401 x-n8n-timestamp Â
     if (!/x-n8n-timestamp/i.test(t)) fail(at, 1, "x-n8n-timestamp is not checked", true);
     else if (!/\b300\b|5\s*\*\s*60\b/.test(t)) fail(at, 1, "no Â±300 s window for x-n8n-timestamp", true);
     if (!/idempotency-key/i.test(t)) fail(at, 1, "idempotency-key is not used to drop repeated callbacks", true);
+    // The header is not covered by the HMAC: it must be compared with fields of the signed body (jobId:event).
+    else if (!/jobId\s*\}?\s*:\s*\$?\{|jobId\s*\+\s*["'`]:["'`]/.test(t)) {
+      fail(at, 1, "idempotency-key is not bound to the signed body (`${data.jobId}:${event}`)", true);
+    }
   }
 });
 
