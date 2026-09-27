@@ -308,6 +308,62 @@ const reIdent = (id) => id.replace(/\$/g, "\\$");
 /** Optional type parameters `<…>`, one level of nesting (`<T extends Record<string, unknown>>`). */
 const GENERICS = "(?:<(?:[^<>]|<[^<>]*>)*>)";
 
+/** Index just after the `>` that closes the `<` at `open` (`=>` inside does not close it). */
+function skipAngles(text, open) {
+  let depth = 0;
+  for (let k = open; k < text.length; k++) {
+    const c = text[k];
+    if ("([{".includes(c)) k = matchBracket(text, k) - 1;
+    else if (c === "<") depth++;
+    else if (c === ">" && text[k - 1] !== "=" && --depth === 0) return k + 1;
+  }
+  return text.length;
+}
+
+/**
+ * Index of the `{` that opens a function body, given the index just after its parameter list. Skips a return
+ * type such as `: Promise<{ raw: string }>` or `: { raw: string }`: there a `{` that starts a type is not the body.
+ */
+function bodyStart(code, k) {
+  let i = k;
+  while (/\s/.test(code[i] ?? "")) i++;
+  if (code[i] !== ":") return code.indexOf("{", k);
+  i++;
+  let expectType = true; // after `:`, `|`, `&`, `=>`, `extends`… a `{` is an object type
+  while (i < code.length) {
+    const c = code[i];
+    if (/\s/.test(c)) i++;
+    else if (c === "{") {
+      if (!expectType) return i;
+      i = matchBracket(code, i);
+      expectType = false;
+    } else if (c === "(" || c === "[") {
+      i = matchBracket(code, i);
+      expectType = false;
+    } else if (c === "<") {
+      i = skipAngles(code, i);
+      expectType = false;
+    } else if (c === "=" && code[i + 1] === ">") {
+      i += 2;
+      expectType = true;
+    } else if (c === '"' || c === "'") {
+      i = skipQuoted(code, i, c);
+      expectType = false;
+    } else if (c === "`") {
+      i = skipTemplateLiteral(code, i);
+      expectType = false;
+    } else if (/[\w$]/.test(c)) {
+      const word = /^[\w$]+/.exec(code.slice(i, i + 64))[0];
+      i += word.length;
+      expectType = /^(extends|keyof|typeof|infer|is|asserts|readonly|unique|new)$/.test(word);
+    } else {
+      i++; // | & , ? : . and the like
+      expectType = "|&,?:".includes(c) || expectType;
+    }
+  }
+  return -1;
+}
+
 /** Source text of `const|let|var id = …` or `function id(…) {…}` in the same file ('' if none). */
 function definitionOf(file, id) {
   if (!/^[A-Za-z_$][\w$]*$/.test(id)) return "";
@@ -315,7 +371,7 @@ function definitionOf(file, id) {
   const name = reIdent(id);
   const fn = new RegExp(`\\bfunction\\s+${name}\\s*${GENERICS}?\\s*\\(`).exec(code); // also function f<T>(req)
   if (fn) {
-    const open = code.indexOf("{", matchBracket(code, fn.index + fn[0].length - 1));
+    const open = bodyStart(code, matchBracket(code, fn.index + fn[0].length - 1));
     return open === -1 ? "" : code.slice(fn.index, matchBracket(code, open));
   }
   const v = new RegExp(`\\b(?:const|let|var)\\s+${name}(?![\\w$])[^=;]*=`).exec(code);
@@ -534,12 +590,13 @@ check("C4", "callback route reads the raw body and parses JSON only after verify
       .filter((name) => !/^(POST|GET|PUT|PATCH|DELETE)$/.test(name));
     // …and it must read the body from its own first parameter (the request it receives).
     // Reads the body of the request named `name`: text()/arrayBuffer(), body.getReader() or for await … of body.
-    // (?<![\w$.]) — the parameter itself, not ctx.req or $req.
+    // (?<![\w$.]) — the parameter itself, not ctx.req or $req. String contents are dropped first, so a string
+    // such as "req.text()" is not a read.
     const readsBodyOf = (name, code) => {
       const own = `(?<![\\w$.])${reIdent(name)}`;
       return new RegExp(
         `${own}\\.(text|arrayBuffer)\\(\\s*\\)|${own}\\.body\\s*[!?]?\\.\\s*getReader\\(\\s*\\)|\\bof\\s+${own}\\.body\\b`,
-      ).test(code);
+      ).test(codeOnly(code));
     };
     const readsFromParam = (def) => {
       const p = (
