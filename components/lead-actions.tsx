@@ -7,6 +7,7 @@ import { LEAD_STATUSES, type LeadStatus } from "@/lib/types";
 import { STATUS_LABELS } from "./status-badge";
 
 const FORBIDDEN_MESSAGE = "Не вдалося: лід не знайдено або він належить іншому робочому простору.";
+const FAILED_MESSAGE = "Не вдалося зберегти зміну. Перевірте з'єднання й спробуйте ще раз.";
 
 export function LeadActions({ leadId, status }: { leadId: string; status: LeadStatus }) {
   const router = useRouter();
@@ -19,13 +20,18 @@ export function LeadActions({ leadId, status }: { leadId: string; status: LeadSt
     setCurrent(next);
     setError(null);
     startTransition(async () => {
-      const result = await updateLeadStatus(leadId, next);
-      if (result.status !== "ok") {
-        setCurrent(previous); // the server refused: show the real status again
-        setError(FORBIDDEN_MESSAGE);
-        return;
+      try {
+        const result = await updateLeadStatus(leadId, next);
+        if (result.status !== "ok") {
+          setCurrent(previous); // the server refused: show the real status again
+          setError(FORBIDDEN_MESSAGE);
+          return;
+        }
+        router.refresh();
+      } catch {
+        setCurrent(previous); // the call itself failed (network, server error)
+        setError(FAILED_MESSAGE);
       }
-      router.refresh();
     });
   }
 
@@ -33,12 +39,16 @@ export function LeadActions({ leadId, status }: { leadId: string; status: LeadSt
     if (!window.confirm("Видалити лід назавжди?")) return;
     setError(null);
     startTransition(async () => {
-      const result = await deleteLead(leadId);
-      if (result.status !== "ok") {
-        setError(FORBIDDEN_MESSAGE);
-        return;
+      try {
+        const result = await deleteLead(leadId);
+        if (result.status !== "ok") {
+          setError(FORBIDDEN_MESSAGE);
+          return;
+        }
+        router.push("/dashboard");
+      } catch {
+        setError(FAILED_MESSAGE);
       }
-      router.push("/dashboard");
     });
   }
 
