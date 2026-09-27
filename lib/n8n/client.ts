@@ -19,10 +19,15 @@ export type TriggerResult =
   | { ok: true; status: number; jobId?: string }
   | { ok: false; status?: number; reason: "config" | "rejected" | "unavailable" };
 
-/** `${APP_BASE_URL}/api/n8n/<event>`, or null when APP_BASE_URL is missing or invalid. */
+/**
+ * `${APP_BASE_URL}/api/n8n/<event>`, or null when APP_BASE_URL is missing, invalid or not https (plain http only
+ * for this machine) — the same rule the n8n side applies before it sends a signed callback there.
+ */
 export function callbackUrlFor(event: string): string | null {
   try {
-    return new URL(`/api/n8n/${event}`, process.env.APP_BASE_URL).toString();
+    const url = new URL(`/api/n8n/${event}`, process.env.APP_BASE_URL);
+    const secure = url.protocol === "https:" || (url.protocol === "http:" && LOOPBACK.has(url.hostname));
+    return secure ? url.toString() : null;
   } catch {
     return null;
   }
