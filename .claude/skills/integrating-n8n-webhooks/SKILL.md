@@ -130,7 +130,8 @@ No exceptions of the kind "the task requires it": these are decisions for a huma
 - [ ] `node --env-file=.env.local .claude/skills/integrating-n8n-webhooks/scripts/send-signed-callback.mjs --url http://127.0.0.1:3000/api/n8n/<event> --job-id <id>`
       → every case gets its expected status (bad signature, stale time, reformatted body, replay…). `<id>` = the
       `job_id` of a quote that is still `processing` (mock log: `workflow <id> running…`; run the mock with a long
-      `--delay`), otherwise `valid`/`duplicate` get 400 for an unknown job.
+      `--delay`), otherwise `valid`/`duplicate` get 400 for an unknown job. Use a new `processing` job for every run:
+      after one run its key is claimed and the quote is ready, so `valid` gets 200 (duplicate).
 - [ ] The server log for the whole scenario has no bodies, emails, phones, tokens or signatures.
 
 ## Skill files

@@ -182,9 +182,10 @@ export function verifyCallback(
 ```ts
 import "server-only";
 
-// Demo storage: process memory. In a real project this is a table/KV with a unique constraint —
-// serverless instances do not share memory.
-const claimed = new Set<string>();
+// Demo storage: process memory, like lib/db.ts. In production this is a table/KV with a unique
+// constraint — serverless instances do not share memory.
+const globalForKeys = globalThis as unknown as { leadDeskCallbackKeys?: Set<string> };
+const claimed = (globalForKeys.leadDeskCallbackKeys ??= new Set<string>());
 
 /** true = first time we see this key; false = duplicate. */
 export function claimKey(key: string): boolean {
@@ -317,10 +318,17 @@ export async function requestQuote(_prev: QuoteFormState, formData: FormData): P
   // Session/permissions first if the form is not public (server-auth-actions).
   const parsed = parseQuoteForm(formData); // server-side validation, no silent truncation
   if (!parsed.ok) return { status: "invalid", errors: parsed.errors, values: parsed.values };
+  // A public form that starts a long workflow also needs a rate limit here (e.g. per client IP) before
+  // anything is stored — see app/quotes/actions.ts + lib/rate-limit.ts in this project.
 
   // The idempotency key is created once and stored with the record: every retry reuses it,
   // and n8n echoes it back as data.requestIdempotencyKey.
-  const quote = await db.insertQuote({ ...parsed.data, status: "queued", idempotencyKey: randomUUID() });
+  const quote = await db.insertQuote({
+    ...parsed.data,
+    status: "queued",
+    idempotencyKey: randomUUID(),
+    correlationId: randomUUID(), // the same id goes into both systems' logs
+  });
 
   after(async () => {
     try {
@@ -330,7 +338,7 @@ export async function requestQuote(_prev: QuoteFormState, formData: FormData): P
             "quote-request",
             // The minimum the workflow needs — never the whole row.
             { quoteId: quote.id, company: quote.company, email: quote.email, description: quote.description, budget: quote.budget },
-            { idempotencyKey: quote.idempotencyKey, callbackUrl },
+            { idempotencyKey: quote.idempotencyKey, correlationId: quote.correlationId, callbackUrl },
           )
         : ({ ok: false, reason: "config" } as const);
 
