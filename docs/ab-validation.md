@@ -93,7 +93,7 @@
 - **`check-contract.mjs --root ../leaddesk-ab-a --changed-since base`** — лише код прогону:
   ```
   check-contract · root: ..\leaddesk-ab-a · scope: changed since base (11 changed + 0 untracked files)
-  
+
   FAIL  C1   no /webhook-test/ URL in code or .env.example
           .env.example:10  test webhook URL in .env.example
   PASS  C2   no NEXT_PUBLIC_ n8n variables; no N8N_* or lib/n8n import in a "use client" file
@@ -101,7 +101,7 @@
           lib/quote-workflow.ts:28  fetch to n8n outside lib/n8n/* — use the n8n client module
   FAIL  C4   callback route reads the raw body and parses JSON only after verifying the signature
           app/api/quotes/[id]/callback/route.ts:26  request.json() — read the raw text first; re-serialising breaks the signature
-          app/api/quotes/[id]/callback/route.ts:1  raw body is never read (request.text())
+          app/api/quotes/[id]/callback/route.ts:1  raw body is never read (request.text() or a streaming reader)
   FAIL  C5   callback signature: HMAC-SHA256, length check + timingSafeEqual, never === / !==
           app/api/quotes/[id]/callback/route.ts:1  no HMAC-SHA256 over the raw body
   PASS  C6   every fetch to n8n has signal: AbortSignal.timeout(...)
@@ -120,7 +120,7 @@
           app/api/quotes/[id]/callback/route.ts:1  no 413 for bodies over 64 KB
           app/api/quotes/[id]/callback/route.ts:1  x-n8n-timestamp is not checked
           app/api/quotes/[id]/callback/route.ts:1  idempotency-key is not used to drop repeated callbacks
-  
+
   4 PASS, 7 FAIL · 6 finding(s) outside the changed lines not shown
   exit=1
   ```
@@ -132,8 +132,7 @@
   заголовків `idempotency-key` немає, а в додатковому прогоні нижче мок прямо пише `idempotency=absent`.
   Далі нічого: на 403 «воркфлоу» не запускається, колбека немає. URL — `/webhook/` (у `.env.local` копії
   поставили production-адресу; у `.env.example` агента — `/webhook-test/`, з яким мок, як і n8n, відповів би
-  404 без `--listen`). `idempotency` мок не записав, бо запит відхилено ще на Header Auth; заголовка
-  `idempotency-key` у списку імен немає.
+  404 без `--listen`).
 - **Додатково (поза основним сценарієм):** той самий мок **без** Header Auth (`N8N_WEBHOOK_TOKEN=` порожній) —
   чи прийме застосунок підписаний колбек:
   ```
@@ -201,7 +200,7 @@
 - **`check-contract.mjs --root ../leaddesk-ab-b --changed-since base`** — лише код прогону:
   ```
   check-contract · root: ..\leaddesk-ab-b · scope: changed since base (14 changed + 0 untracked files)
-  
+
   PASS  C1   no /webhook-test/ URL in code or .env.example
   PASS  C2   no NEXT_PUBLIC_ n8n variables; no N8N_* or lib/n8n import in a "use client" file
   PASS  C3   n8n is called only from lib/n8n/*, which starts with import "server-only"
@@ -213,7 +212,7 @@
   PASS  C9   .env.example has the contract keys; .env.local is git-ignored; used N8N_* keys are listed
   PASS  C10  every fetch to n8n sends x-n8n-token and idempotency-key; no secrets in the URL
   PASS  C11  callback route: 415 content-type, 413 64 KB, 401 x-n8n-timestamp ±300 s, idempotency-key
-  
+
   11 PASS, 0 FAIL · 6 finding(s) outside the changed lines not shown
   exit=0
   ```
@@ -274,7 +273,7 @@
     `docs/n8n-integrations.md` — рядок і примітки для `lead-created`. Закрило C1, C9.
   - Сам новий код прогону B до контракту доробок не потребував (його `check-contract --changed-since base` — 0 FAIL);
     зміни в ньому зроблено пізніше, під час рев'ю перед здачею (див. нижче).
-  - `ab77078` — косметика: коментар у `.env.example`, доданий агентом B, більше не містить рядка тестового URL.
+  - `ab77078` — косметика: коментар у `.env.example`, який додав агент B, більше не містить рядка тестового URL.
 - **Ключі контракту в `.env.example`:** `N8N_WEBHOOK_BASE_URL=http://127.0.0.1:5678/webhook`,
   `N8N_WEBHOOK_TOKEN=change-me-webhook-token`, `N8N_CALLBACK_SECRET=change-me-callback-secret`,
   `APP_BASE_URL=http://127.0.0.1:3000`; тестового URL немає (і в коментарях теж). У `.env.local` ті самі ключі
@@ -301,16 +300,16 @@
 
 ### Після рев'ю перед здачею
 
-Перед push гілку перевірили два незалежні агенти-рецензенти (відповідність умовам і технічне рев'ю). Їхні
+Перед пушем гілку перевірили два незалежні агенти-рецензенти (відповідність умовам і технічне рев'ю). Їхні
 знахідки перевірено вручну; виправлено окремими комітами:
 
 | Коміт | Що | Звідки |
 |---|---|---|
 | `36da9a9` | колбек: 413 за `content-length` ще до читання тіла (розмір перевіряється й після) | `req.text()` буферизував будь-яке тіло |
 | `f256595` | форма кошторису: `label htmlFor`, `aria-describedby` на помилку, підсумок `role="alert"`; нормалізація CRLF перед підрахунком довжини | правило 5 нашого ж `building-client-form` |
-| `8465ded` | клієнт n8n: `redirect: "manual"` — `x-n8n-token` не йде за редиректом на інший хост | fetch зберігає власні заголовки при переході |
+| `8465ded` | клієнт n8n: `redirect: "manual"` — `x-n8n-token` не йде за редиректом на інший хост | під час редиректу fetch передає власні заголовки далі |
 | `61de794` | `lead-created`: аудит — окремий `after()`, не чекає повторів n8n | аудит міг чекати до ~34 с |
-| `b468334` | `fix(server-auth-actions)`: `updateLeadStatus`/`deleteLead` перевіряють сесію, належність ліда workspace і значення статусу | знахідка рев'ю Task A, старий код у файлі з діфу PR |
+| `b468334` | `fix(server-auth-actions)`: `updateLeadStatus`/`deleteLead` перевіряють сесію, належність ліда до workspace і значення статусу | знахідка рев'ю Task A, старий код у файлі, який змінює цей PR |
 | `aec8887` | сторінка статусу перестає опитувати через 15 хв без колбека | безкінечний `router.refresh()` |
 
 Перевірено на гілці (порти 3100/5679, бо 3000 і 5678 зайняті іншими застосунками на цій машині): сценарій
@@ -331,7 +330,7 @@
 | `888a969` | текст очікування на `/quotes/[id]` іде з клієнтського компонента: «оновиться сама» / «довше, ніж зазвичай» / «більше не оновлюється» | сторінка обіцяла автооновлення після зупинки опитування й «менеджер отримає обидва» |
 | `cc6ed63` | `readBodyLimited()`: тіло колбека читається потоком і обривається на 64 КБ навіть без `content-length` (413) | chunked-тіло все одно буферизувалось повністю |
 | `2face7f` | демо-ліміт: 5 валідних запитів кошторису з однієї IP за 10 хв, до збереження й виклику n8n; описано в `docs/n8n-integrations.md` | публічна форма без обмеження запускала дорогий воркфлоу |
-| `b52b76c`, `fa19e15` | скіл: C4 приймає потокове читання тіла; у `SKILL.md`/`contract.md` уточнено, що ключ = `${data.jobId}:${body.event}`; шаблони роуту й `callback.ts` — точна копія коду; пояснено, чому Retry On Fail в n8n (3 × 1000 мс) відрізняється від повторів застосунку; мова в блоках коду | неоднозначний крок 7, markdownlint, «суперечність» повторів |
+| `b52b76c`, `fa19e15` | скіл: C4 приймає потокове читання тіла; у `SKILL.md`/`contract.md` уточнено, що ключ = `${data.jobId}:${body.event}`; шаблони роуту й `callback.ts` — точна копія коду; пояснено, чому Retry On Fail в n8n (3 × 1000 мс) відрізняється від повторів застосунку; для блоків коду вказано мову (markdownlint) | неоднозначний крок 7, markdownlint, «суперечність» повторів |
 | `c1c2b21`, `46c3ecb` | `skill-review-n8n.md`: екрановано `\|\|` у таблиці; команда-доказ `grep -rlE` | таблиця ламалась |
 
 Перевірено на збірці (порти 3100/5679): сценарій форма → 202 → колбек → «Готово»; матриця колбеків 11/11;
@@ -349,6 +348,11 @@
 | `0220062` | ліміт частоти: старі ключі прибираються; у реєстрі — коли можна довіряти `x-forwarded-for` |
 | `4d4666f` | `check-contract`: C11 вимагає, щоб `idempotency-key` звірявся з полями підписаного тіла; порожній `--changed-since=` — помилка використання (код 2) |
 | `bc6505a` | скіл: IF-вузол в n8n пускає колбек лише на адресу застосунку (захист від SSRF через `callbackUrl`); шаблони = посилений код |
+
+Перевірено на збірці (порти 3100/5679): сценарій форма → `POST /webhook/quote-request -> 202 auth=ok idempotency=new` →
+колбек прийнято; матриця колбеків 11/11; нотатка до чужого ліда (`leadId=lead_0007`) → «…іншому робочому
+простору», введений текст лишився в полі; запуск без `N8N_CALLBACK_SECRET` → запит одразу `failed`, у журналі
+`[n8n] quote-request: not sent, n8n settings are missing or invalid`, мок виклику не отримав.
 
 - **Що скіл змінив у собі після прогонів:**
   - `7593db2` — перевірки колбека в `check-contract.mjs` враховують усі прямі імпорти роуту: на прогоні A
@@ -370,7 +374,7 @@
 
 ## Висновок
 
-Скіл змінив результат суттєво, і це видно з мока, а не з враження. Обмеження: кожне плече мало один прогін
+Скіл змінив результат суттєво, і це видно з мока, а не з враження. Обмеження: кожен варіант (A і B) пройшов лише один раз
 (A і B по разу, та сама модель і effort), тож розкид між повторними прогонами не виміряно; різниця тут
 якісна (403/401 проти 202 → колбек → «Готово», 7 проти 0 FAIL), а не статистична. Без скіла агент зробив акуратну фічу за
 загальними знаннями й наявним кодом (таймаут, `after()` для аудиту, `timingSafeEqual`, захист від підміни

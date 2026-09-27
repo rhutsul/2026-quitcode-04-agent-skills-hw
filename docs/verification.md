@@ -1,6 +1,5 @@
 # Перевірка (Task A–C)
 
-> Сюди — лише те, що справді сталося: цитати, числа, імена файлів, SHA комітів.
 > Прогони A/B і фіча «запит на кошторис» — в окремому звіті `docs/ab-validation.md` (Task D).
 
 - **Інструмент і версія, модель:** Claude Code 2.1.280 (десктоп-застосунок, вкладка Code) · Opus 5.5 (`claude-opus-5-5`)
@@ -38,7 +37,7 @@
 
 ### Рев'ю застосунку за скілом
 
-Зроблено агентом за правилами скіла (читання `rules/<id>.md`) для `app/`, `components/`, `lib/`; кожну
+Рев'ю зробив агент за правилами скіла (читання `rules/<id>.md`) для `app/`, `components/`, `lib/`; кожну
 пораду звірено з `node_modules/next/dist/docs/` (Next.js 16.3.5). Рядки — для коду `main` (`01a7dd4`).
 
 | Файл:рядок | id правила | Що не так | Виправлення для Next.js 16 | Статус |
@@ -97,8 +96,8 @@ curl -sL -b "$C" -H "RSC: 1" "$U" | wc -c                           # RSC, ба�
   радить додати пакет в `experimental.optimizePackageImports` — для `recharts` це вже зроблено в
   Next.js 16.3.5 за замовчуванням (`optimizePackageImports.md`, список «optimized by default»), тож
   конфіг не чіпали. `server-after-nonblocking` і `server-auth-actions` для `app/actions.ts` у Task A свідомо
-  відклали: у цьому файлі живе виклик n8n, а зміни в ньому до BASE (Task D) дали б прогону A частину
-  контракту задарма. Після Task D обидва зроблено: `after()` для `lead-created` — `f6ecfd4`, `61de794`;
+  відклали: у цьому файлі розташований виклик n8n, а зміни в ньому до BASE (Task D) підказали б агентові в
+  прогоні A частину контракту. Після Task D обидва зроблено: `after()` для `lead-created` — `f6ecfd4`, `61de794`;
   `fix(server-auth-actions)` — `b468334`. Решта рядків «не робили» — понад обов'язкові два, залишено як знахідки рев'ю.
 - **Чи змінили числа виміряні виправлення:** так — `async-parallel` TTFB −36 %,
   `server-cache-react` запити 3 → 1, `server-serialization` RSC у 10 разів менше.
@@ -163,7 +162,7 @@ curl -sL -b "$C" -H "RSC: 1" "$U" | wc -c                           # RSC, ба�
 
 Скіл: `.claude/skills/integrating-n8n-webhooks/` (коміт `82bef87`). Мова скіла — англійська (технічна
 документація для агента); фрази-тригери в `description` — українською й англійською. `name` = назва
-теки, `description` — 927 символів (що + «Use when …» + тригери + «Not for …»), `SKILL.md` — 141 рядок на момент коміту `82bef87` (143 після правок за рев'ю перед здачею).
+теки, `description` — 927 символів (що + «Use when …» + тригери + «Not for …»), `SKILL.md` — 141 рядок на момент коміту `82bef87` (145 після правок за рев'ю перед здачею).
 
 ```
 integrating-n8n-webhooks/
@@ -311,6 +310,8 @@ x-n8n-token». Після виправлення — «without idempotency-key»
 **`--changed-since`** — окремий git-репозиторій з коду `main` (коміт `start`, тег `base`), далі
 додано `lib/n8n/client.ts` з порушеннями, рядок із токеном у `.env.example` і змінено один рядок
 `app/actions.ts` поза викликом n8n. Старі порушення не показано, нові — так:
+
+Скорочено й стиснуто: лише рядки FAIL, кілька знахідок одного файлу — через «·».
 
 ```
 check-contract · root: ..\ws04-work\changed-fixture · scope: changed since base (2 changed + 1 untracked files)
