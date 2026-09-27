@@ -35,24 +35,30 @@ export async function requestQuote(_prevState: QuoteFormState, formData: FormDat
   // The workflow runs 40–90 s: n8n answers 202 { job_id } at once, the PDF arrives by callback.
   // The user does not wait even for the 202 — it happens after the redirect is sent.
   after(async () => {
-    const callbackUrl = callbackUrlFor(QUOTE_EVENT);
-    const result = callbackUrl
-      ? await triggerWorkflow(
-          QUOTE_EVENT,
-          // The minimum the workflow needs to build the estimate.
-          {
-            quoteId: quote.id,
-            company: quote.company,
-            email: quote.email,
-            description: quote.description,
-            budget: quote.budget,
-          },
-          { idempotencyKey: quote.idempotencyKey, correlationId: quote.correlationId, callbackUrl },
-        )
-      : ({ ok: false, reason: "config" } as const);
+    try {
+      const callbackUrl = callbackUrlFor(QUOTE_EVENT);
+      const result = callbackUrl
+        ? await triggerWorkflow(
+            QUOTE_EVENT,
+            // The minimum the workflow needs to build the estimate.
+            {
+              quoteId: quote.id,
+              company: quote.company,
+              email: quote.email,
+              description: quote.description,
+              budget: quote.budget,
+            },
+            { idempotencyKey: quote.idempotencyKey, correlationId: quote.correlationId, callbackUrl },
+          )
+        : ({ ok: false, reason: "config" } as const);
 
-    if (result.ok && result.jobId) await db.markQuoteProcessing(quote.id, result.jobId);
-    else await db.markQuoteNotStarted(quote.id, result.ok ? "rejected" : result.reason);
+      if (result.ok && result.jobId) await db.markQuoteProcessing(quote.id, result.jobId);
+      else await db.markQuoteNotStarted(quote.id, result.ok ? "rejected" : result.reason);
+    } catch (error) {
+      // Anything unexpected must not leave the quote queued forever (no callback will come).
+      console.error(`[n8n] ${QUOTE_EVENT}: trigger failed for ${quote.id}: ${error instanceof Error ? error.name : "error"}`);
+      await db.markQuoteNotStarted(quote.id, "error").catch(() => undefined);
+    }
   });
 
   redirect(`/quotes/${quote.id}`);

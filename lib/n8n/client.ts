@@ -51,7 +51,9 @@ export async function triggerWorkflow(
 ): Promise<TriggerResult> {
   const url = webhookUrl(event);
   const token = process.env.N8N_WEBHOOK_TOKEN;
-  if (!url || !token) {
+  // With a callback the answer comes signed with N8N_CALLBACK_SECRET: without it every callback would be
+  // refused and the record would wait forever, so do not start such a workflow at all.
+  if (!url || !token || (options.callbackUrl && !process.env.N8N_CALLBACK_SECRET)) {
     console.error(`[n8n] ${event}: not sent, n8n settings are missing or invalid`);
     return { ok: false, reason: "config" };
   }
