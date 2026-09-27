@@ -37,20 +37,24 @@ export async function requestQuote(_prevState: QuoteFormState, formData: FormDat
   after(async () => {
     try {
       const callbackUrl = callbackUrlFor(QUOTE_EVENT);
-      const result = callbackUrl
-        ? await triggerWorkflow(
-            QUOTE_EVENT,
-            // The minimum the workflow needs to build the estimate.
-            {
-              quoteId: quote.id,
-              company: quote.company,
-              email: quote.email,
-              description: quote.description,
-              budget: quote.budget,
-            },
-            { idempotencyKey: quote.idempotencyKey, correlationId: quote.correlationId, callbackUrl },
-          )
-        : ({ ok: false, reason: "config" } as const);
+      if (!callbackUrl) {
+        // No callback could reach the app: do not start the workflow at all.
+        console.error(`[n8n] ${QUOTE_EVENT}: not sent, APP_BASE_URL is missing or invalid (correlation ${quote.correlationId})`);
+        await db.markQuoteNotStarted(quote.id, "config");
+        return;
+      }
+      const result = await triggerWorkflow(
+        QUOTE_EVENT,
+        // The minimum the workflow needs to build the estimate.
+        {
+          quoteId: quote.id,
+          company: quote.company,
+          email: quote.email,
+          description: quote.description,
+          budget: quote.budget,
+        },
+        { idempotencyKey: quote.idempotencyKey, correlationId: quote.correlationId, callbackUrl },
+      );
 
       if (result.ok && result.jobId) await db.markQuoteProcessing(quote.id, result.jobId);
       else await db.markQuoteNotStarted(quote.id, result.ok ? "rejected" : result.reason);

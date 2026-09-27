@@ -340,14 +340,18 @@ export async function requestQuote(_prev: QuoteFormState, formData: FormData): P
   after(async () => {
     try {
       const callbackUrl = callbackUrlFor("quote-request");
-      const result = callbackUrl
-        ? await triggerWorkflow(
-            "quote-request",
-            // The minimum the workflow needs — never the whole row.
-            { quoteId: quote.id, company: quote.company, email: quote.email, description: quote.description, budget: quote.budget },
-            { idempotencyKey: quote.idempotencyKey, correlationId: quote.correlationId, callbackUrl },
-          )
-        : ({ ok: false, reason: "config" } as const);
+      if (!callbackUrl) {
+        // No callback could reach the app: do not start the workflow at all, and say so in the log.
+        console.error(`[n8n] quote-request: not sent, APP_BASE_URL is missing or invalid (correlation ${quote.correlationId})`);
+        await db.markQuoteNotStarted(quote.id, "config");
+        return;
+      }
+      const result = await triggerWorkflow(
+        "quote-request",
+        // The minimum the workflow needs — never the whole row.
+        { quoteId: quote.id, company: quote.company, email: quote.email, description: quote.description, budget: quote.budget },
+        { idempotencyKey: quote.idempotencyKey, correlationId: quote.correlationId, callbackUrl },
+      );
 
       // Conditional transitions: a fast workflow's callback may already have set ready/failed.
       // Never overwrite that with an unconditional update.
