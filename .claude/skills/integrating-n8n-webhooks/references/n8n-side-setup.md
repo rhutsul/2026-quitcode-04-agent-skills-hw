@@ -20,8 +20,9 @@ it ourselves. Give the human these settings as text (example: event `quote-reque
    `{{ String($('Webhook').item.json.body?.callbackUrl ?? '') === 'https://portal.client.example/api/n8n/quote-request' }}`
    is true. The workflow serves one event, so its callback URL is known in advance and must match **exactly**.
    Otherwise stop. Write the literal exactly as the app sends it (`new URL('/api/n8n/<event>', APP_BASE_URL)`):
-   origin only (any path and trailing `/` of `APP_BASE_URL` are dropped), host in lower case, no `:443`, then
-   `/api/n8n/<event>`. Safest is to copy `callbackUrl` from the input of the first execution. A literal that
+   origin only (any path and trailing `/` of `APP_BASE_URL` are dropped), host in lower case, no default port
+   (`:443`, `:80`), then `/api/n8n/<event>`. Safest is to copy `callbackUrl` from an execution the app itself
+   started (a test submission of the form), not from a request someone else sent. A literal that
    differs by one character stops every callback, and the record stays `processing`. Do not compare a prefix
    (`startsWith`): `…/api/n8n/../../admin` or `…/api/n8n/%2e%2e/…` would pass it and still reach another path of
    the app with a valid signature. `body?.` and `String(… ?? '')` keep a request without `callbackUrl` from
