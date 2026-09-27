@@ -34,6 +34,9 @@ Contract: `.claude/skills/integrating-n8n-webhooks`. One row per event.
   10 minutes, checked in `requestQuote` before the record is stored or n8n is called; the 6th gets
   `{ status: "rate_limited" }` and keeps the typed values. `lib/rate-limit.ts` keeps the window in process
   memory — fine for one `next start` process; on serverless or several instances move it to a shared store
-  (Redis/KV/DB). The IP is used only as the key and is not logged.
+  (Redis/KV/DB). The IP is used only as the key and is not logged. Keys with no hit inside the window are
+  pruned once the map holds more than 1000 of them. `x-forwarded-for` is trusted as the client IP only because
+  the app is meant to run behind the hosting proxy that sets it; exposed directly, a client could spoof it —
+  then key by the socket address or the proxy's verified header instead.
 - Status page: polls every 3 s, says «slower than usual» after 3 min and stops polling after 15 min without a
   callback (the text then says so).
