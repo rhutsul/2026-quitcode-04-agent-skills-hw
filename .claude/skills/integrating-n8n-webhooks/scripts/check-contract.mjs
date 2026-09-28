@@ -323,6 +323,11 @@ function findCalls(file, namePattern) {
 
 /** An identifier inside a RegExp source: `$` is a valid identifier character but a regex anchor. */
 const reIdent = (id) => id.replace(/\$/g, "\\$");
+/**
+ * After the request in a call: the request itself — `req`, `req!`, `req.clone()`, `req as Request` — then `,` or `)`.
+ * Not `req.headers` or `req.body`.
+ */
+const REQ_ITSELF = "(?:\\s*!)?(?:\\s*\\.clone\\(\\s*\\))?(?:\\s+(?:as|satisfies)\\s+[\\w$.]+(?:<[^()]*>)?)?\\s*[,)]";
 /** Optional type parameters `<…>`, one level of nesting (`<T extends Record<string, unknown>>`). */
 const GENERICS = "(?:<(?:[^<>]|<[^<>]*>)*>)";
 
@@ -605,7 +610,7 @@ check("C4", "callback route reads the raw body and parses JSON only after verify
     // (req.text() / arrayBuffer() / a reader that streams req.body).
     // Helper: a function the route calls with req (not the POST(req) signature itself) that is defined in one
     // of the route's modules and reads the body there.
-    const calledWithReq = [...r.bare.matchAll(new RegExp(`(?<!function\\s+)(?<![\\w$])([A-Za-z_$][\\w$]*)\\(\\s*${reIdent(u.param)}\\s*[,)]`, "g"))] // req itself, not req.headers
+    const calledWithReq = [...r.bare.matchAll(new RegExp(`(?<!function\\s+)(?<![\\w$])([A-Za-z_$][\\w$]*)\\(\\s*${reIdent(u.param)}${REQ_ITSELF}`, "g"))]
       .map((m) => m[1])
       .filter((name) => !/^(POST|GET|PUT|PATCH|DELETE)$/.test(name));
     // …and it must read the body from its own first parameter (the request it receives).
