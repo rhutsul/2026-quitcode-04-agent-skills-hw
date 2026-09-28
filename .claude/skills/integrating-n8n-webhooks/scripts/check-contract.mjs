@@ -626,7 +626,8 @@ check("C4", "callback route reads the raw body and parses JSON only after verify
       return p ? readsBodyOf(p, def) : false;
     };
     const helperReads = calledWithReq.some((name) =>
-      u.members.some((m) => m !== r && readsFromParam(definitionOf({ code: m.bare }, name))),
+      // The route itself counts too: a local helper may name its parameter differently (readRaw(request)).
+      u.members.some((m) => readsFromParam(definitionOf({ code: m.bare }, name))),
     );
     const readsRaw = readsBodyOf(u.param, r.bare) || helperReads;
     if (!readsRaw) fail(r.path, 1, `raw body is never read (${u.param}.text() or a streaming reader)`, true, helpers);
