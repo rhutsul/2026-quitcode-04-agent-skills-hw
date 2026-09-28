@@ -605,7 +605,7 @@ check("C4", "callback route reads the raw body and parses JSON only after verify
     // (req.text() / arrayBuffer() / a reader that streams req.body).
     // Helper: a function the route calls with req (not the POST(req) signature itself) that is defined in one
     // of the route's modules and reads the body there.
-    const calledWithReq = [...r.bare.matchAll(new RegExp(`(?<!function\\s+)(?<![\\w$])([A-Za-z_$][\\w$]*)\\(\\s*${reIdent(u.param)}(?![\\w$])`, "g"))]
+    const calledWithReq = [...r.bare.matchAll(new RegExp(`(?<!function\\s+)(?<![\\w$])([A-Za-z_$][\\w$]*)\\(\\s*${reIdent(u.param)}\\s*[,)]`, "g"))] // req itself, not req.headers
       .map((m) => m[1])
       .filter((name) => !/^(POST|GET|PUT|PATCH|DELETE)$/.test(name));
     // …and it must read the body from its own first parameter (the request it receives).
