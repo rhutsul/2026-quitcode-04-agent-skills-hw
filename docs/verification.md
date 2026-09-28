@@ -162,7 +162,7 @@ curl -sL -b "$C" -H "RSC: 1" "$U" | wc -c                           # RSC, ба�
 
 Скіл: `.claude/skills/integrating-n8n-webhooks/` (коміт `82bef87`). Мова скіла — англійська (технічна
 документація для агента); фрази-тригери в `description` — українською й англійською. `name` = назва
-теки, `description` — 927 символів (що + «Use when …» + тригери + «Not for …»), `SKILL.md` — 141 рядок на момент коміту `82bef87` (147 після правок за рев'ю).
+теки, `description` — 927 символів (що + «Use when …» + тригери + «Not for …»), `SKILL.md` — 141 рядок на момент коміту `82bef87` (147 після подальших правок, `docs/hardening-log.md`).
 
 ```
 integrating-n8n-webhooks/
@@ -354,7 +354,7 @@ Docker Desktop):
 у журналі сервера `[n8n] lead-created -> 202 in 169 ms (attempt 1, correlation …)`, email і текст
 заявки — 0 входжень.
 
-**`check-contract.mjs` на фінальному коді** (HEAD гілки після перенесення прогону B, доведення й виправлень за рев'ю):
+**`check-contract.mjs` на фінальному коді** (HEAD гілки після перенесення прогону B, доведення й подальших виправлень):
 
 ```
 $ node .claude/skills/integrating-n8n-webhooks/scripts/check-contract.mjs; echo "exit=$?"
